@@ -1,0 +1,27 @@
+# Fly.io config for the WebSocket match server.
+# Deploy with: fly launch --no-deploy   (first time, creates the app)
+#              fly deploy               (every time after)
+# Set secrets with: fly secrets set WS_TICKET_SECRET=... SUPABASE_SERVICE_ROLE_KEY=... etc.
+app = "grid-clash-ws"
+primary_region = "iad"
+
+[build]
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

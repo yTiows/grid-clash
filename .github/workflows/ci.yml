@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  typecheck-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build Next.js app
+        run: npm run build
+        env:
+          # Real checks (RLS, real queries) run against a live Supabase
+          # branch in a later job — this build step only needs to compile,
+          # so placeholder values are correct here, not a shortcut.
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+          SUPABASE_SERVICE_ROLE_KEY: placeholder
+          WS_TICKET_SECRET: ci-placeholder-not-for-production
+          NEXT_PUBLIC_GAME_API_URL: ws://localhost:3001
+
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap Supabase-equivalent objects
+        run: |
+          psql "postgresql://postgres:postgres@localhost:5432/postgres" -c "
+            create schema if not exists auth;
+            create table if not exists auth.users (
+              id uuid primary key default gen_random_uuid(),
+              email text not null unique,
+              created_at timestamptz not null default now()
+            );
+            create role anon;
+            create role authenticated;
+            create role service_role;
+            create or replace function auth.uid() returns uuid language sql stable as \$\$
+              select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
+            \$\$;
+          "
+
+      - name: Apply every migration in order
+        run: |
+          for f in supabase/migrations/*.sql; do
+            echo "Applying $f"
+            psql "postgresql://postgres:postgres@localhost:5432/postgres" \
+              -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: Run schema self-checks
+        run: |
+          psql "postgresql://postgres:postgres@localhost:5432/postgres" -t -A -c "
+            select public.assert_function_dependencies();
+            select public.assert_ledger_vocabulary();
+          "

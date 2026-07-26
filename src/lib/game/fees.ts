@@ -1,0 +1,476 @@
+/**
+ * Fee model.
+ *
+ * One formula, one cap, published tiers. There is no threshold at which a
+ * player should prefer a different stake for fee reasons below the cap, and
+ * above the cap the marginal rate only ever falls.
+ *
+ * Tier criteria are published verbatim in the UI. A hidden multiplier on a
+ * money term is not a transparent fee, whatever it is called internally.
+ */
+
+export const FEE_CAP_CENTS = 25_000 // $250 per match, hard ceiling
+
+export type FeeTier = "standard" | "established" | "elite"
+
+export interface FeeTierDefinition {
+  id: FeeTier
+  name: string
+  bps: number
+  /** Shown to the player verbatim. Every criterion is objectively checkable. */
+  criteria: string[]
+  minMatches: number
+  minDistinctOpponents: number
+  requiresVerification: boolean
+  /** Percentile of Skill Index, where the tier uses one. */
+  topPercentile: number | null
+}
+
+export const FEE_TIERS: Record<FeeTier, FeeTierDefinition> = {
+  standard: {
+    id: "standard",
+    name: "Standard",
+    // 1% — this is the number the brand promises (BRAND.md §3: "we take 1%
+    // where the category takes 15–40%"; break-even 50.51%). It was drifting
+    // out of sync with the code, which still charged 200bps (51.02%
+    // break-even) — exactly the gap this brand's whole positioning is built
+    // to call out in everyone else. Fixed here, not in the copy.
+    bps: 100,
+    criteria: ["Everyone starts here"],
+    minMatches: 0,
+    minDistinctOpponents: 0,
+    requiresVerification: false,
+    topPercentile: null,
+  },
+  established: {
+    id: "established",
+    name: "Established",
+    bps: 85,
+    criteria: [
+      "100 completed matches",
+      "50 distinct opponents",
+      "Identity verified",
+      "No upheld fair-play findings",
+    ],
+    minMatches: 100,
+    minDistinctOpponents: 50,
+    requiresVerification: true,
+    topPercentile: null,
+  },
+  elite: {
+    id: "elite",
+    name: "Elite",
+    bps: 60,
+    criteria: [
+      "500 completed matches",
+      "150 distinct opponents",
+      "Identity verified",
+      "Skill Index in the top 1%",
+      "No upheld fair-play findings",
+    ],
+    minMatches: 500,
+    minDistinctOpponents: 150,
+    requiresVerification: true,
+    topPercentile: 1,
+  },
+}
+
+export interface MatchFee {
+  tier: FeeTier
+  bps: number
+  potCents: number
+  /** Uncapped fee, before FEE_CAP_CENTS is applied. */
+  rawFeeCents: number
+  feeCents: number
+  capped: boolean
+  winnerPayoutCents: number
+  /** Realised rate after the cap. Falls below `bps` on large pots. */
+  effectiveBps: number
+}
+
+/**
+ * Fee is floored so any rounding remainder lands in the payout rather than in
+ * the platform's cut.
+ */
+export function calculateMatchFee(entryFeeCents: number, tier: FeeTier = "standard"): MatchFee {
+  const { bps } = FEE_TIERS[tier]
+  const potCents = entryFeeCents * 2
+  const rawFeeCents = Math.floor((potCents * bps) / 10_000)
+  const feeCents = Math.min(rawFeeCents, FEE_CAP_CENTS)
+
+  return {
+    tier,
+    bps,
+    potCents,
+    rawFeeCents,
+    feeCents,
+    capped: rawFeeCents > FEE_CAP_CENTS,
+    winnerPayoutCents: potCents - feeCents,
+    effectiveBps: Math.round((feeCents / potCents) * 10_000),
+  }
+}
+
+/** Pot at which the cap starts binding, for a given tier. */
+export function capBindsAtPotCents(tier: FeeTier = "standard"): number {
+  return Math.ceil((FEE_CAP_CENTS * 10_000) / FEE_TIERS[tier].bps)
+}
+
+/**
+ * Break-even win rate. Staking E to win W, expected value is p·W − E, so
+ * break-even is p = E / W.
+ *
+ * Printed next to the stake selector, per tier. It is the single most
+ * decision-relevant number on the page: at 2% it is 51.0%, which a strong
+ * player clears. The whole product premise depends on this staying true, so it
+ * is displayed rather than derivable.
+ */
+export function breakEvenWinRate(entryFeeCents: number, tier: FeeTier = "standard"): number {
+  return entryFeeCents / calculateMatchFee(entryFeeCents, tier).winnerPayoutCents
+}
+
+export function expectedValueCents(
+  entryFeeCents: number,
+  winRate: number,
+  tier: FeeTier = "standard"
+): number {
+  return winRate * calculateMatchFee(entryFeeCents, tier).winnerPayoutCents - entryFeeCents
+}
+
+// --- Stake brackets ---------------------------------------------------------
+
+/**
+ * Financial leagues. Access is earned, which keeps a funded beginner out of a
+ * pool where they are certain to be outclassed.
+ *
+ * NOTE — liquidity: segmenting a small player base across brackets thins every
+ * queue. `bracketsOpenAfterWait` widens the search the longer someone waits, so
+ * a quiet Tuesday does not mean no games. Without that, this design is a
+ * fairness win and a retention loss.
+ */
+export type BracketId = "bronze" | "silver" | "gold" | "elite"
+
+export interface Bracket {
+  id: BracketId
+  name: string
+  minStakeCents: number
+  maxStakeCents: number
+  /** Matches required before this bracket unlocks. */
+  minMatches: number
+  minSkillIndex: number
+  requiresVerification: boolean
+}
+
+export const BRACKETS: Record<BracketId, Bracket> = {
+  bronze: {
+    id: "bronze",
+    name: "Bronze",
+    minStakeCents: 100,
+    maxStakeCents: 1_000,
+    minMatches: 0,
+    minSkillIndex: 0,
+    requiresVerification: false,
+  },
+  silver: {
+    id: "silver",
+    name: "Silver",
+    minStakeCents: 1_000,
+    maxStakeCents: 10_000,
+    minMatches: 25,
+    minSkillIndex: 2_000,
+    requiresVerification: true,
+  },
+  gold: {
+    id: "gold",
+    name: "Gold",
+    minStakeCents: 10_000,
+    maxStakeCents: 100_000,
+    minMatches: 100,
+    minSkillIndex: 5_000,
+    requiresVerification: true,
+  },
+  elite: {
+    id: "elite",
+    name: "Elite",
+    minStakeCents: 100_000,
+    maxStakeCents: 1_000_000,
+    minMatches: 300,
+    minSkillIndex: 8_000,
+    requiresVerification: true,
+  },
+}
+
+export const BRACKET_ORDER: BracketId[] = ["bronze", "silver", "gold", "elite"]
+
+export function bracketsUnlockedFor(
+  matchesPlayed: number,
+  skillIndex: number,
+  verified: boolean
+): BracketId[] {
+  return BRACKET_ORDER.filter((id) => {
+    const b = BRACKETS[id]
+    if (matchesPlayed < b.minMatches) return false
+    if (skillIndex < b.minSkillIndex) return false
+    if (b.requiresVerification && !verified) return false
+    return true
+  })
+}
+
+/**
+ * Progressive widening. After a wait threshold the matcher accepts adjacent
+ * brackets so thin queues still resolve. Never widens past what the player has
+ * unlocked, and never upward past their stake ceiling.
+ */
+export function bracketsOpenAfterWait(
+  preferred: BracketId,
+  unlocked: BracketId[],
+  waitedMs: number
+): BracketId[] {
+  const widenAfterMs = 20_000
+  if (waitedMs < widenAfterMs || !unlocked.includes(preferred)) return [preferred]
+
+  const steps = Math.floor(waitedMs / widenAfterMs)
+  const index = BRACKET_ORDER.indexOf(preferred)
+  const lo = Math.max(0, index - steps)
+  const hi = Math.min(BRACKET_ORDER.length - 1, index + steps)
+
+  return BRACKET_ORDER.slice(lo, hi + 1).filter((b) => unlocked.includes(b))
+}
+
+// --- New-account stake ceiling ---------------------------------------------
+
+/**
+ * A smurf can play erratically to keep their confidence low and farm the
+ * beginner pool for a full placement window. Matchmaking isolation alone does
+ * not stop that — it only decides who the beginner loses to.
+ *
+ * A stake ceiling protects the beginner's wallet, which is the thing actually
+ * at risk. It rises with match count rather than with consistency, so
+ * deliberately erratic play cannot hold a smurf inside the low-stake pool.
+ */
+export function newAccountStakeCeilingCents(matchesPlayed: number): number {
+  if (matchesPlayed < 5) return 200
+  if (matchesPlayed < 15) return 500
+  if (matchesPlayed < 30) return 1_000
+  if (matchesPlayed < 60) return 5_000
+  return Number.MAX_SAFE_INTEGER
+}
+
+// --- Suggested stakes -------------------------------------------------------
+
+/**
+ * A recommendation, never a nudge upward. Bankroll-fraction sizing is the
+ * standard result: risking a small fixed fraction per match makes ruin
+ * improbable even through normal losing variance.
+ *
+ * Anything above the suggestion requires explicit confirmation. The platform
+ * never proposes a larger stake than this function returns.
+ */
+export function suggestedStakeCents(
+  balanceCents: number,
+  matchesPlayed: number,
+  recentWinRate: number
+): { suggestedCents: number; maxAdvisableCents: number; rationale: string } {
+  const ceiling = newAccountStakeCeilingCents(matchesPlayed)
+
+  // 2% of bankroll per match; 1% while still finding their level.
+  const fraction = matchesPlayed < 30 ? 0.01 : 0.02
+  const bankrollSized = Math.floor(balanceCents * fraction)
+
+  const suggestedCents = Math.max(100, Math.min(bankrollSized, ceiling))
+  const maxAdvisableCents = Math.max(100, Math.min(Math.floor(balanceCents * 0.05), ceiling))
+
+  let rationale: string
+  if (ceiling !== Number.MAX_SAFE_INTEGER) {
+    rationale = `New accounts are capped at ${(ceiling / 100).toFixed(2)} per match while placement completes.`
+  } else if (recentWinRate < 0.45) {
+    rationale = "Your recent results are below break-even. This keeps variance survivable."
+  } else {
+    rationale = "Sized at 2% of your balance so a normal losing run does not end your session."
+  }
+
+  return { suggestedCents, maxAdvisableCents, rationale }
+}
+
+// --- Formatting -------------------------------------------------------------
+
+export function formatCents(cents: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100)
+}
+
+export function formatPercent(fraction: number, digits = 2): string {
+  return `${(fraction * 100).toFixed(digits)}%`
+}
+
+// --- Tournament economics ---------------------------------------------------
+
+/**
+ * Tournament fee is charged on the gross field, not per match, and is stated
+ * on the contest card before entry.
+ *
+ * NOTE — the 1v1 fee is 2%. Tournament fees are higher because an entry buys
+ * a structure rather than a single match: bracket running, seat guarantees,
+ * concentrated prizes and a title. That gap is defensible but it is large, and
+ * sophisticated players will compare the two directly. See TOURNAMENT_FEE_BPS.
+ */
+export type ContestKind =
+  | "ranked"
+  | "tournament_standard"
+  | "tournament_dollar"
+  | "tournament_milestone"
+
+/** Negative means the house adds to the pot from realised profit. */
+export const CONTEST_FEE_BPS: Record<ContestKind, number> = {
+  // Dead weight in practice — the real ranked path reads FEE_TIERS via
+  // calculateMatchFee(), never this. Kept in sync anyway so no one reading
+  // this table sees a second, disagreeing number for what ranked charges.
+  ranked: 100,
+  // Tournament economics are deliberately their own thing, not a copy of
+  // ranked's 1% — an entry buys bracket structure, seat guarantees, and a
+  // concentrated prize, not a single match. Untouched by the ranked fix.
+  tournament_standard: 1000,
+  tournament_dollar: 0,
+  tournament_milestone: -100,
+}
+
+export interface PrizePool {
+  kind: ContestKind
+  entryFeeCents: number
+  fieldSize: number
+  grossCents: number
+  feeCents: number
+  prizePoolCents: number
+  returnToPlayer: number
+}
+
+/**
+ * Positive fees are floored and subsidies are ceilinged, so in both directions
+ * the rounding remainder lands in the prize pool rather than the platform's
+ * cut.
+ */
+export function calculatePrizePool(
+  kind: ContestKind,
+  entryFeeCents: number,
+  fieldSize: number,
+  /**
+   * Overrides the kind's default rate. Tournament formats set their own fee
+   * (Swiss 12%, Ladder 8%, ...), and passing it explicitly is what keeps the
+   * rate on the contest card identical to the rate actually charged.
+   */
+  overrideBps?: number
+): PrizePool {
+  const bps = overrideBps ?? CONTEST_FEE_BPS[kind]
+  const grossCents = entryFeeCents * fieldSize
+  const raw = (grossCents * bps) / 10_000
+  const feeCents = bps >= 0 ? Math.floor(raw) : Math.ceil(raw)
+  const prizePoolCents = grossCents - feeCents
+
+  return {
+    kind,
+    entryFeeCents,
+    fieldSize,
+    grossCents,
+    feeCents,
+    prizePoolCents,
+    returnToPlayer: prizePoolCents / grossCents,
+  }
+}
+
+/** Expected value of one entry against a uniform field. */
+export function tournamentExpectedValueCents(pool: PrizePool): number {
+  return pool.prizePoolCents / pool.fieldSize - pool.entryFeeCents
+}
+
+export const MILESTONE_THRESHOLD_CENTS = 100_000
+export const MILESTONE_ENTRY_FEE_CENTS = 10_000
+export const MILESTONE_FIELD_SIZE = 15
+export const DOLLAR_ENTRY_FEE_CENTS = 100
+export const DOLLAR_FIELD_SIZE = 15
+
+export function progressToNextMilestone(realisedProfitCents: number) {
+  const currentCents = realisedProfitCents % MILESTONE_THRESHOLD_CENTS
+  return {
+    currentCents,
+    targetCents: MILESTONE_THRESHOLD_CENTS,
+    fraction: currentCents / MILESTONE_THRESHOLD_CENTS,
+  }
+}
+
+// --- Rating -----------------------------------------------------------------
+
+export const ELO_DEFAULT = 1600
+export const ELO_MIN = 400
+export const ELO_MAX = 3200
+
+/**
+ * Selectable ranked stake amounts, shown in the queue UI. Distinct from
+ * BRACKETS above: brackets gate which *range* of stakes an account may enter
+ * based on skill/verification, while this is the fixed, concrete set of
+ * amounts offered within whatever range is unlocked.
+ */
+export const RANKED_STAKE_TIERS_CENTS = [500, 2000, 10000] as const
+export type RankedStakeCents = (typeof RANKED_STAKE_TIERS_CENTS)[number]
+
+/**
+ * K-factor by experience. New accounts move fast so matchmaking finds their
+ * level quickly; established accounts move slowly so a hot streak does not
+ * fling them into a bracket they cannot hold.
+ */
+export function kFactor(matchesPlayed: number): number {
+  if (matchesPlayed < 30) return 40
+  if (matchesPlayed < 100) return 24
+  return 16
+}
+
+export function expectedScore(ratingA: number, ratingB: number): number {
+  return 1 / (1 + 10 ** ((ratingB - ratingA) / 400))
+}
+
+export interface RatingChange {
+  winnerBefore: number
+  winnerAfter: number
+  winnerDelta: number
+  loserBefore: number
+  loserAfter: number
+  loserDelta: number
+}
+
+function clampRating(rating: number): number {
+  return Math.min(ELO_MAX, Math.max(ELO_MIN, rating))
+}
+
+export function calculateRatingChange(
+  winnerRating: number,
+  winnerMatches: number,
+  loserRating: number,
+  loserMatches: number
+): RatingChange {
+  const winnerExpected = expectedScore(winnerRating, loserRating)
+  const winnerAfter = clampRating(
+    Math.round(winnerRating + kFactor(winnerMatches) * (1 - winnerExpected))
+  )
+  const loserAfter = clampRating(
+    Math.round(loserRating + kFactor(loserMatches) * (0 - (1 - winnerExpected)))
+  )
+
+  return {
+    winnerBefore: winnerRating,
+    winnerAfter,
+    winnerDelta: winnerAfter - winnerRating,
+    loserBefore: loserRating,
+    loserAfter,
+    loserDelta: loserAfter - loserRating,
+  }
+}
+
+export function calculateDrawRatingChange(
+  ratingA: number,
+  matchesA: number,
+  ratingB: number,
+  matchesB: number
+): { aAfter: number; bAfter: number } {
+  const expectedA = expectedScore(ratingA, ratingB)
+  return {
+    aAfter: clampRating(Math.round(ratingA + kFactor(matchesA) * (0.5 - expectedA))),
+    bAfter: clampRating(Math.round(ratingB + kFactor(matchesB) * (0.5 - (1 - expectedA)))),
+  }
+}

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-6 -6 128 128" width="128" height="128" role="img" aria-label="Grid Clash">
+  <title>Grid Clash</title>
+  <!-- The mark is the win condition: four connected cells crossing a 5x5 grid. -->
+  <g fill="#241748" stroke="#08060f" stroke-width="4">
+    <rect x="0"  y="0"  width="20" height="20" rx="3"/><rect x="24" y="0"  width="20" height="20" rx="3"/><rect x="48" y="0"  width="20" height="20" rx="3"/><rect x="72" y="0"  width="20" height="20" rx="3"/><rect x="96" y="0"  width="20" height="20" rx="3"/>
+    <rect x="0"  y="24" width="20" height="20" rx="3"/><rect x="24" y="24" width="20" height="20" rx="3"/><rect x="48" y="24" width="20" height="20" rx="3"/><rect x="72" y="24" width="20" height="20" rx="3"/><rect x="96" y="24" width="20" height="20" rx="3"/>
+    <rect x="0"  y="48" width="20" height="20" rx="3"/><rect x="24" y="48" width="20" height="20" rx="3"/><rect x="48" y="48" width="20" height="20" rx="3"/><rect x="72" y="48" width="20" height="20" rx="3"/><rect x="96" y="48" width="20" height="20" rx="3"/>
+    <rect x="0"  y="72" width="20" height="20" rx="3"/><rect x="24" y="72" width="20" height="20" rx="3"/><rect x="48" y="72" width="20" height="20" rx="3"/><rect x="72" y="72" width="20" height="20" rx="3"/><rect x="96" y="72" width="20" height="20" rx="3"/>
+    <rect x="0"  y="96" width="20" height="20" rx="3"/><rect x="24" y="96" width="20" height="20" rx="3"/><rect x="48" y="96" width="20" height="20" rx="3"/><rect x="72" y="96" width="20" height="20" rx="3"/><rect x="96" y="96" width="20" height="20" rx="3"/>
+  </g>
+  <path d="M10 10 L82 82" stroke="#08060f" stroke-width="16" stroke-linecap="round"/>
+  <g fill="#b8ff2e" stroke="#08060f" stroke-width="4">
+    <rect x="0"  y="0"  width="20" height="20" rx="3"/>
+    <rect x="24" y="24" width="20" height="20" rx="3"/>
+    <rect x="48" y="48" width="20" height="20" rx="3"/>
+    <rect x="72" y="72" width="20" height="20" rx="3"/>
+  </g>
+</svg>
