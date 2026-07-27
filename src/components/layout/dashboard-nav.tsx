@@ -20,8 +20,14 @@ export function DashboardNav({
           <Link href="/dashboard/tournaments" className="text-sm font-semibold text-muted-foreground hover:text-primary">
             Tournaments
           </Link>
+          <Link href="/leaderboard" className="text-sm font-semibold text-muted-foreground hover:text-primary">
+            Leaderboard
+          </Link>
           <Link href="/dashboard/wallet" className="text-sm font-semibold text-muted-foreground hover:text-primary">
             Wallet
+          </Link>
+          <Link href="/tutorial" className="hidden text-sm font-semibold text-muted-foreground hover:text-primary sm:inline">
+            Tutorial
           </Link>
           <div className="sticker px-3 py-1.5 text-sm">
             <span className="text-muted-foreground">Balance </span>

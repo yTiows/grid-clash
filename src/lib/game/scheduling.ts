@@ -36,7 +36,7 @@ import { FORMATS, type FormatId } from "./formats"
  *   64         (6 rounds)   9%
  *   128+       (7+ rounds)  10%
  *
- * This also narrows the gap against the 2% head-to-head fee at small fields,
+ * This also narrows the gap against the 1% head-to-head fee at small fields,
  * which is where the comparison is most visible to players.
  */
 export const MIN_FIELD_FEE_BPS = 500
@@ -118,8 +118,9 @@ export function sizeFieldForDemand(
   const raw = Math.floor(expected)
   const bounded = Math.min(format.maxField, Math.max(format.minField, raw))
 
-  // Bracket formats need a clean tree.
-  if (formatId === "single_elimination" || formatId === "satellite") {
+  // Bracket formats need a clean tree. Bounty is a knockout with a side
+  // payment on elimination — same tree shape as single_elimination.
+  if (formatId === "single_elimination" || formatId === "satellite" || formatId === "bounty") {
     return Math.max(format.minField, nearestPowerField(bounded))
   }
   return bounded
@@ -183,7 +184,7 @@ export function commitField(
   const capped = Math.min(registrations, ceiling)
 
   let fieldSize = capped
-  if (formatId === "single_elimination" || formatId === "satellite") {
+  if (formatId === "single_elimination" || formatId === "satellite" || formatId === "bounty") {
     fieldSize = Math.max(floor, nearestPowerField(capped))
   }
 

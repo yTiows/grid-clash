@@ -141,10 +141,14 @@ WS_SECRET=$(openssl rand -hex 32)
 sed -i.bak "s|^WS_TICKET_SECRET=.*|WS_TICKET_SECRET=$WS_SECRET|" .env.local
 echo "WS_TICKET_SECRET=$WS_SECRET"
 
-# Generate admin secret
-ADMIN_SECRET=$(openssl rand -hex 24)
-sed -i.bak "s|^ADMIN_SECRET=.*|ADMIN_SECRET=$ADMIN_SECRET|" .env.local
-echo "ADMIN_SECRET=$ADMIN_SECRET"
+# NOTE: an ADMIN_SECRET used to be generated here. Removed — grep confirms
+# nothing in src/ ever reads it. This platform's real admin gate is the
+# users.is_admin column (checked via the is_admin() RPC against the caller's
+# own session), granted by one manual SQL UPDATE and deliberately having no
+# self-service or secret-based path — see migration
+# 20260726000021_admin_and_exclusion_wiring.sql. A generated-but-unused
+# secret here was misleading: it implied a secret-based admin backdoor that
+# does not exist.
 
 # Generate cron secret
 CRON_SECRET=$(openssl rand -hex 24)
@@ -169,27 +173,40 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # Test Supabase
+#
+# FOUND BY: reading this against how curl actually behaves. `curl -s` alone
+# exits 0 on an HTTP 401/403/404 — only a transport-level failure (DNS,
+# refused connection) makes it non-zero. A typo'd anon key would have
+# returned an auth error from PostgREST and still printed a green check.
+# `-f`/`--fail` makes curl itself fail on a non-2xx response, which is what
+# "testing the key" actually requires.
+#
+# users has RLS with anon SELECT revoked (migration
+# 20260724000006_security_hardening.sql, Finding 1) but public_players is
+# anon-readable — hitting that view is a real, meaningful reachability +
+# auth check, not a table this key is expected to fail against by design.
 echo -n "Testing Supabase... "
-if curl -s -H "Authorization: Bearer $SUPABASE_ANON" "$SUPABASE_URL/rest/v1/users?limit=1" >/dev/null 2>&1; then
+if curl -sf -H "Authorization: Bearer $SUPABASE_ANON" -H "apikey: $SUPABASE_ANON" \
+  "$SUPABASE_URL/rest/v1/public_players?limit=1" >/dev/null 2>&1; then
   echo "✅"
 else
-  echo "⚠️  (may fail if IP is blocked — check Supabase dashboard)"
+  echo "❌ (request failed — check the URL and anon key, or that migrations have been pushed)"
 fi
 
 # Test Stripe
 echo -n "Testing Stripe... "
-if curl -s -u "$STRIPE_SECRET:" https://api.stripe.com/v1/charges?limit=1 >/dev/null 2>&1; then
+if curl -sf -u "$STRIPE_SECRET:" https://api.stripe.com/v1/charges?limit=1 >/dev/null 2>&1; then
   echo "✅"
 else
-  echo "⚠️  (offline or invalid key)"
+  echo "❌ (request failed — check the secret key)"
 fi
 
 # Test Twilio
 echo -n "Testing Twilio... "
-if curl -s -u "$TWILIO_SID:$TWILIO_TOKEN" "https://api.twilio.com/2010-04-01/Accounts/$TWILIO_SID.json" >/dev/null 2>&1; then
+if curl -sf -u "$TWILIO_SID:$TWILIO_TOKEN" "https://api.twilio.com/2010-04-01/Accounts/$TWILIO_SID.json" >/dev/null 2>&1; then
   echo "✅"
 else
-  echo "⚠️  (offline or invalid key)"
+  echo "❌ (request failed — check the account SID and auth token)"
 fi
 
 echo ""

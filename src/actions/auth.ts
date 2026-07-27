@@ -5,6 +5,7 @@ import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
 import { signInSchema, signUpSchema } from "@/lib/validations/auth"
+import { checkRateLimit, formatRetryAfter } from "@/lib/middleware/rate-limit"
 
 export type AuthActionState = {
   status: "idle" | "error" | "success"
@@ -12,10 +13,24 @@ export type AuthActionState = {
   fieldErrors?: Record<string, string[] | undefined>
 }
 
+/** Best-effort client identifier for pre-auth rate limiting. No user id exists yet. */
+function clientIp(): string {
+  const forwardedFor = headers().get("x-forwarded-for")
+  return forwardedFor?.split(",")[0]?.trim() || headers().get("x-real-ip") || "unknown"
+}
+
 export async function signUpAction(
   _prevState: AuthActionState,
   formData: FormData
 ): Promise<AuthActionState> {
+  const rateLimit = await checkRateLimit("signup", clientIp())
+  if (!rateLimit.allowed) {
+    return {
+      status: "error",
+      message: `Too many signup attempts. Try again in ${formatRetryAfter(rateLimit.retryAfterMs)}.`,
+    }
+  }
+
   const parsed = signUpSchema.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
@@ -79,6 +94,16 @@ export async function signInAction(
       status: "error",
       message: "Please fix the errors below.",
       fieldErrors: parsed.error.flatten().fieldErrors,
+    }
+  }
+
+  // Keyed on email, not IP: the threat is credential stuffing against one
+  // account, which an IP-based limit alone wouldn't catch from a botnet.
+  const rateLimit = await checkRateLimit("login", parsed.data.email.toLowerCase())
+  if (!rateLimit.allowed) {
+    return {
+      status: "error",
+      message: `Too many attempts. Try again in ${formatRetryAfter(rateLimit.retryAfterMs)}.`,
     }
   }
 

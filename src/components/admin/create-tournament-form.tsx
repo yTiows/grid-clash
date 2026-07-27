@@ -21,11 +21,17 @@ function SubmitButton() {
   )
 }
 
-export function CreateTournamentForm() {
+export function CreateTournamentForm({
+  satelliteTargets,
+}: {
+  /** Open tournament_standard contests a satellite could feed into. */
+  satelliteTargets: { id: string; name: string; entry_fee_cents: number }[]
+}) {
   const [state, formAction] = useFormState(createTournamentAction, initial)
   const [formatId, setFormatId] = useState("single_elimination")
 
   const format = FORMATS[formatId as keyof typeof FORMATS]
+  const isSatellite = formatId === "satellite"
 
   return (
     <form action={formAction} className="space-y-4">
@@ -94,6 +100,47 @@ export function CreateTournamentForm() {
             required
           />
         </div>
+      </div>
+
+      {/* A satellite's entire mechanic is "prize = a seat in a bigger
+          contest" (CLAUDE_CODE_BRIEF.md §5.3) — the DB refuses to create one
+          without a target (tournaments_satellite_shape), so this field isn't
+          optional polish, it's required for the format to exist at all. */}
+      {isSatellite && (
+        <div className="space-y-2 rounded-md border-2 border-gold/40 bg-gold/5 p-3">
+          <Label htmlFor="satelliteTargetTournamentId">Satellite target</Label>
+          {satelliteTargets.length === 0 ? (
+            <p className="text-xs text-rival">
+              No open standard contests to target yet — create the target tournament first.
+            </p>
+          ) : (
+            <>
+              <select
+                id="satelliteTargetTournamentId"
+                name="satelliteTargetTournamentId"
+                required
+                className="flex h-11 w-full rounded-md border-2 border-white/15 bg-black/20 px-3 text-sm"
+              >
+                {satelliteTargets.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} — ${(t.entry_fee_cents / 100).toFixed(2)} entry
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                The seat value is the target&apos;s own entry fee. This satellite&apos;s entry fee
+                must be lower than that.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label htmlFor="startsAt">
+          Starts at <span className="normal-case text-muted-foreground">(optional — shows a live countdown)</span>
+        </Label>
+        <Input id="startsAt" name="startsAt" type="datetime-local" />
       </div>
 
       {state.status === "error" && <p className="text-sm text-rival">{state.message}</p>}

@@ -9,13 +9,18 @@ max_rows = 1000
 
 [db]
 port = 54322
-major_version = 15
+# Must match the linked remote project's Postgres version, or local dev
+# diverges from what migrations actually run against. FOUND BY: `supabase
+# gen types` against the real project (ajuxrpxpayyaxsrijuir) reporting
+# postgres_engine 17, while this was still set to 15 — a leftover from
+# before the project existed.
+major_version = 17
 
 [studio]
 enabled = true
 port = 54323
 
-[inbucket]
+[local_smtp]
 enabled = true
 port = 54324
 

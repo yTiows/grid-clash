@@ -4,62 +4,57 @@ import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
-interface DashboardMetrics {
-  activeMatches: number;
-  totalPlayersOnline: number;
-  todaysRevenue: number;
-  todaysRake: number;
-  todaysPayouts: number;
-  avgMatchDuration: number;
-  suspiciousActivities: SuspiciousActivity[];
-  payoutVerificationStatus: PayoutVerification;
-  recentMatches: RecentMatch[];
-}
-
-interface SuspiciousActivity {
-  id: string;
-  type: 'rate_limit' | 'replay_detected' | 'money_leak' | 'concurrent_match' | 'invalid_move';
-  player_id: string;
-  severity: 'info' | 'warning' | 'error';
-  description: string;
-  timestamp: string;
+/**
+ * Shape matches src/app/api/admin/metrics/route.ts's actual JSON response,
+ * field for field. Live match/queue counts ("active matches", "players
+ * online") live in the WS server's separate in-memory process state, not
+ * this database-backed route — see that route's own comment block. This
+ * page only ever renders what it can actually get: persisted revenue,
+ * completed-match stats, and a read-side settlement spot-check.
+ */
+interface MoneyDiscrepancy {
+  matchId: string;
+  expectedPot: number;
+  distributed: number;
 }
 
 interface PayoutVerification {
-  total_matches_verified: number;
-  total_matches_unverified: number;
-  total_money_processed: number;
-  total_house_rake: number;
-  money_discrepancies: MoneyDiscrepancy[];
-}
-
-interface MoneyDiscrepancy {
-  match_id: string;
-  expected_payout: number;
-  actual_payout: number;
-  difference: number;
+  matchesChecked: number;
+  discrepancies: MoneyDiscrepancy[];
 }
 
 interface RecentMatch {
   id: string;
-  player_1: string;
-  player_2: string;
+  player1: string;
+  player2: string;
   winner: string;
-  duration_seconds: number;
-  payout_verified: boolean;
-  entry_fee: number;
-  rake: number;
-  timestamp: string;
+  durationSeconds: number;
+  entryFeeCents: number;
+  rakeCents: number;
+  completedAt: string;
+}
+
+interface DashboardMetrics {
+  todaysRevenue: number;
+  todaysRankedRake: number;
+  todaysTournamentRake: number;
+  avgMatchDurationSeconds: number;
+  payoutVerificationStatus: PayoutVerification;
+  recentMatches: RecentMatch[];
 }
 
 /**
  * Admin Monitoring Dashboard
  *
- * Real-time operational metrics for the platform:
- * - Active matches & player count
- * - Revenue tracking (rake, payouts)
- * - Fraud detection (rate limits, suspicious patterns)
- * - Payout verification (settlement ledger integrity)
+ * Real operational metrics, backed only by what /api/admin/metrics actually
+ * returns:
+ * - Revenue tracking (ranked rake, tournament rake, total)
+ * - Average completed-match duration
+ * - Payout verification (settlement ledger integrity spot-check)
+ * - Recent completed matches
+ *
+ * Live match/player counts are not shown here — see the note in the header
+ * grid below.
  */
 
 export default function MonitoringDashboard() {
@@ -131,27 +126,36 @@ export default function MonitoringDashboard() {
         </div>
       </div>
 
+      {/* Live counts note — this route is DB-only and cannot see the WS
+          server's in-memory state, so there is no fake "0" or stale number
+          shown in its place. */}
+      <div className="mb-8 rounded border-2 border-gray-700 bg-gray-800/60 px-4 py-3 text-sm text-gray-400">
+        Active matches and players online live in the WS match server&apos;s own
+        in-memory state, not this database — that live count isn&apos;t wired into
+        this route and isn&apos;t shown here.
+      </div>
+
       {/* Key Metrics Grid */}
       <div className="grid grid-cols-4 gap-4 mb-8">
-        <MetricCard
-          label="Active Matches"
-          value={metrics.activeMatches}
-          color="blue"
-        />
-        <MetricCard
-          label="Players Online"
-          value={metrics.totalPlayersOnline}
-          color="green"
-        />
         <MetricCard
           label="Today's Revenue"
           value={`$${(metrics.todaysRevenue / 100).toFixed(2)}`}
           color="purple"
         />
         <MetricCard
-          label="House Rake"
-          value={`$${(metrics.todaysRake / 100).toFixed(2)}`}
+          label="Ranked Rake"
+          value={`$${(metrics.todaysRankedRake / 100).toFixed(2)}`}
+          color="green"
+        />
+        <MetricCard
+          label="Tournament Rake"
+          value={`$${(metrics.todaysTournamentRake / 100).toFixed(2)}`}
           color="orange"
+        />
+        <MetricCard
+          label="Avg Match Duration"
+          value={`${metrics.avgMatchDurationSeconds}s`}
+          color="blue"
         />
       </div>
 
@@ -160,86 +164,53 @@ export default function MonitoringDashboard() {
         <h2 className="text-xl font-bold mb-4">Revenue Breakdown (Today)</h2>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
-            <span>Total Payouts:</span>
-            <span className="font-mono">${(metrics.todaysPayouts / 100).toFixed(2)}</span>
+            <span>Ranked Rake:</span>
+            <span className="font-mono">${(metrics.todaysRankedRake / 100).toFixed(2)}</span>
           </div>
           <div className="flex justify-between">
-            <span>House Rake (1%):</span>
-            <span className="font-mono text-green-400">
-              ${(metrics.todaysRake / 100).toFixed(2)}
-            </span>
+            <span>Tournament Rake:</span>
+            <span className="font-mono">${(metrics.todaysTournamentRake / 100).toFixed(2)}</span>
           </div>
           <div className="flex justify-between font-bold border-t border-gray-700 pt-2">
-            <span>Net Revenue:</span>
-            <span className="font-mono">
-              ${((metrics.todaysRake - metrics.todaysPayouts) / 100).toFixed(2)}
+            <span>Total Revenue:</span>
+            <span className="font-mono text-green-400">
+              ${(metrics.todaysRevenue / 100).toFixed(2)}
             </span>
           </div>
         </div>
       </Card>
 
-      {/* Suspicious Activities */}
-      {metrics.suspiciousActivities.length > 0 && (
-        <Card className="bg-red-900 border-red-700 p-6 mb-8">
-          <h2 className="text-xl font-bold mb-4">⚠️ Suspicious Activities</h2>
-          <div className="space-y-2 text-sm">
-            {metrics.suspiciousActivities.slice(0, 10).map((activity) => (
-              <div key={activity.id} className="flex justify-between">
-                <span className="text-gray-300">{activity.type}</span>
-                <span className="text-gray-400">{activity.description}</span>
-              </div>
-            ))}
-          </div>
-          {metrics.suspiciousActivities.length > 10 && (
-            <p className="text-xs text-gray-400 mt-2">
-              +{metrics.suspiciousActivities.length - 10} more activities
-            </p>
-          )}
-        </Card>
-      )}
-
       {/* Payout Verification Status */}
       <Card className="bg-gray-800 border-gray-700 p-6 mb-8">
         <h2 className="text-xl font-bold mb-4">Settlement Verification</h2>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-gray-400 text-sm">Total Money Processed</p>
-              <p className="text-2xl font-bold">
-                ${(metrics.payoutVerificationStatus.total_money_processed / 100).toFixed(2)}
-              </p>
-            </div>
-            <div>
-              <p className="text-gray-400 text-sm">House Rake Collected</p>
-              <p className="text-2xl font-bold text-green-400">
-                ${(metrics.payoutVerificationStatus.total_house_rake / 100).toFixed(2)}
-              </p>
-            </div>
+          <div className="flex justify-between">
+            <span>Ranked Matches Checked:</span>
+            <span className="text-gray-300">{metrics.payoutVerificationStatus.matchesChecked}</span>
           </div>
 
-          <div className="border-t border-gray-700 pt-4">
-            <div className="flex justify-between mb-2">
-              <span>Verified Matches:</span>
-              <span className="text-green-400">
-                {metrics.payoutVerificationStatus.total_matches_verified}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span>Unverified Matches:</span>
-              <span className="text-yellow-400">
-                {metrics.payoutVerificationStatus.total_matches_unverified}
-              </span>
-            </div>
-          </div>
-
-          {/* Money Discrepancies */}
-          {metrics.payoutVerificationStatus.money_discrepancies.length > 0 && (
-            <Alert variant="destructive" className="mt-4">
-              <AlertDescription>
-                {metrics.payoutVerificationStatus.money_discrepancies.length} payout
-                discrepancies detected
-              </AlertDescription>
-            </Alert>
+          {metrics.payoutVerificationStatus.discrepancies.length > 0 ? (
+            <>
+              <Alert variant="destructive">
+                <AlertDescription>
+                  {metrics.payoutVerificationStatus.discrepancies.length} payout discrepancies
+                  detected
+                </AlertDescription>
+              </Alert>
+              <div className="space-y-2 text-sm">
+                {metrics.payoutVerificationStatus.discrepancies.slice(0, 10).map((d) => (
+                  <div key={d.matchId} className="flex justify-between border-b border-gray-700 pb-1">
+                    <span className="font-mono text-xs text-gray-400">{d.matchId.slice(0, 8)}...</span>
+                    <span>
+                      expected ${(d.expectedPot / 100).toFixed(2)}, distributed $
+                      {(d.distributed / 100).toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-green-400">No discrepancies found.</p>
           )}
         </div>
       </Card>
@@ -257,26 +228,22 @@ export default function MonitoringDashboard() {
                 <th>Duration</th>
                 <th>Entry Fee</th>
                 <th>Rake</th>
-                <th>Verified</th>
+                <th>Completed</th>
               </tr>
             </thead>
             <tbody>
               {metrics.recentMatches.map((match) => (
                 <tr key={match.id} className="border-b border-gray-700">
                   <td className="py-2 font-mono text-xs">{match.id.slice(0, 8)}...</td>
-                  <td>{match.player_1.slice(0, 4)}... vs {match.player_2.slice(0, 4)}...</td>
-                  <td className="text-green-400">{match.winner.slice(0, 4)}...</td>
-                  <td>{match.duration_seconds}s</td>
-                  <td>${(match.entry_fee / 100).toFixed(2)}</td>
-                  <td>${(match.rake / 100).toFixed(2)}</td>
                   <td>
-                    <span
-                      className={
-                        match.payout_verified ? 'text-green-400' : 'text-yellow-400'
-                      }
-                    >
-                      {match.payout_verified ? '✓' : '⧖'}
-                    </span>
+                    {match.player1.slice(0, 4)}... vs {match.player2.slice(0, 4)}...
+                  </td>
+                  <td className="text-green-400">{match.winner.slice(0, 4)}...</td>
+                  <td>{match.durationSeconds}s</td>
+                  <td>${(match.entryFeeCents / 100).toFixed(2)}</td>
+                  <td>${(match.rakeCents / 100).toFixed(2)}</td>
+                  <td className="text-xs text-gray-400">
+                    {new Date(match.completedAt).toLocaleString()}
                   </td>
                 </tr>
               ))}

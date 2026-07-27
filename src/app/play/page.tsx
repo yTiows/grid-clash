@@ -113,7 +113,11 @@ function PlayPageInner() {
           )}
 
           {state.phase === "over" && state.result && (
-            <MatchResultCard result={state.result} onPlayAgain={() => void connect(stakeCents)} />
+            <MatchResultCard
+              result={state.result}
+              matchId={state.matchId ?? undefined}
+              onPlayAgain={() => void connect(stakeCents)}
+            />
           )}
 
           {state.phase === "error" && (

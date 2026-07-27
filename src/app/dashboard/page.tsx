@@ -4,13 +4,42 @@ import { StakePicker } from "@/components/lobby/stake-picker"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { newAccountStakeCeilingCents } from "@/lib/game/fees"
+import { FEE_TIERS, BRACKETS, newAccountStakeCeilingCents, type FeeTier } from "@/lib/game/fees"
 import { createClient } from "@/lib/supabase/server"
 
-const TIER_LABEL: Record<string, string> = {
-  standard: "Standard — 2.00%",
-  established: "Established — 1.75%",
-  elite: "Elite — 1.25%",
+/**
+ * Was a hardcoded table (2.00% / 1.75% / 1.25%) that had drifted out of sync
+ * with FEE_TIERS' real rates (1.00% / 0.85% / 0.60% — fees.ts's own comment
+ * explains the 1% figure is the number BRAND.md's whole positioning is built
+ * on). A player was being told a rate nearly double what they were actually
+ * charged. Derived from FEE_TIERS directly now so the two cannot drift again.
+ */
+function tierLabel(tier: FeeTier): string {
+  const def = FEE_TIERS[tier]
+  return `${def.name} — ${(def.bps / 100).toFixed(2)}%`
+}
+
+/**
+ * Tournament title tiers are keyed to entry fee, not Skill Index (see
+ * complete_tournament()'s v_tier logic) — there's no formal skill->tier
+ * mapping in this codebase to gate against. BRACKETS (fees.ts) already
+ * defines skill thresholds for an unrelated, unwired "financial leagues"
+ * concept; reusing its numbers here is purely informational (a hint, never a
+ * gate) rather than inventing a second, disconnected set of thresholds.
+ */
+const TOURNAMENT_TIER_HINT: { minSkillIndex: number; tierName: string }[] = [
+  { minSkillIndex: BRACKETS.elite.minSkillIndex, tierName: "Obsidian" },
+  { minSkillIndex: BRACKETS.gold.minSkillIndex, tierName: "Gold" },
+  { minSkillIndex: BRACKETS.silver.minSkillIndex, tierName: "Silver" },
+]
+
+function nextTournamentTierHint(skillIndex: number): string | null {
+  for (const tier of TOURNAMENT_TIER_HINT) {
+    if (skillIndex >= tier.minSkillIndex) {
+      return `Your Skill Index already puts you in range for ${tier.tierName}-tier tournaments.`
+    }
+  }
+  return null
 }
 
 export default async function DashboardPage() {
@@ -20,10 +49,11 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser()
   if (!user) return null
 
-  const [{ data: profile }, { data: standing }, { data: bests }] = await Promise.all([
+  const [{ data: profile }, { data: standing }, { data: bests }, { data: milestone }] = await Promise.all([
     supabase.from("users").select("*").eq("id", user.id).single(),
     supabase.from("player_standing").select("*").eq("user_id", user.id).maybeSingle(),
     supabase.from("personal_bests").select("*").eq("user_id", user.id).maybeSingle(),
+    supabase.from("milestone_progress").select("*").maybeSingle(),
   ])
 
   if (!profile) {
@@ -40,8 +70,9 @@ export default async function DashboardPage() {
   }
 
   const ceiling = newAccountStakeCeilingCents(profile.matches_played)
-  const feeTier = standing?.fee_tier ?? "standard"
+  const feeTier = (standing?.fee_tier ?? "standard") as FeeTier
   const netProfit = bests?.net_profit_cents ?? 0
+  const tierHint = standing ? nextTournamentTierHint(standing.skill_index) : null
 
   return (
     <div className="space-y-6">
@@ -53,9 +84,22 @@ export default async function DashboardPage() {
           </p>
         </div>
         <Badge variant={feeTier === "elite" ? "gold" : feeTier === "established" ? "default" : "muted"}>
-          {TIER_LABEL[feeTier]}
+          {tierLabel(feeTier)}
         </Badge>
       </div>
+
+      {/* Personalised, concrete invitation toward tournaments — CLAUDE_CODE_BRIEF.md
+          §5.5. Only shown once there's a real Skill Index to point at. */}
+      {tierHint && (
+        <Card className="border-primary/40 bg-primary/5">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+            <p className="text-sm font-medium">{tierHint}</p>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/dashboard/tournaments">Browse contests</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-4">
         <Card>
@@ -129,6 +173,36 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* CLAUDE_CODE_BRIEF.md §5.4 — a house-subsidised Milestone event is a
+          real, honest hook (the platform is adding money, not just hyping a
+          number), which is exactly why it belongs on the dashboard as a
+          live, checkable figure rather than a one-off announcement. Numbers
+          only, no editorializing, per brand/BRAND.md's "numbers speak" rule. */}
+      {milestone && milestone.threshold_cents ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Next Milestone event</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="h-3 overflow-hidden rounded-full border-2 border-ink bg-white/10">
+              <div
+                className="h-full bg-gold transition-all"
+                style={{
+                  width: `${Math.min(100, ((milestone.progress_cents ?? 0) / milestone.threshold_cents) * 100).toFixed(1)}%`,
+                }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span className="tabular">
+                ${((milestone.progress_cents ?? 0) / 100).toFixed(2)} of $
+                {(milestone.threshold_cents / 100).toFixed(2)} platform profit
+              </span>
+              <span>{milestone.milestones_earned ?? 0} unlocked to date</span>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <p className="max-w-2xl text-xs text-muted-foreground">
         Matches are for entertainment, not a source of income. Rankings are determined solely

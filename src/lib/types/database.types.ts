@@ -1,1942 +1,3356 @@
-// Generated from live schema introspection against a from-scratch replay of
-// all 19 migrations. Regenerate with:
-//   npx supabase gen types typescript --linked > src/lib/types/database.types.ts
-// once a real Supabase project exists.
+// Generated from the live Supabase project (grid-clash, ajuxrpxpayyaxsrijuir)
+// after applying every migration through 20260726000035_http_rate_limiting.
+// Regenerate after adding a migration with:
+//   npx supabase gen types typescript --project-id ajuxrpxpayyaxsrijuir > src/lib/types/database.types.ts
 
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
 
-export type AccountStatus = "active" | "suspended" | "banned" | "kyc_pending" | "phone_pending"
-export type TransactionType = "deposit" | "withdrawal" | "match_payout" | "bonus" | "refund" | "chargeback_claw"
-export type TransactionStatus = "pending" | "completed" | "failed" | "on_hold" | "cancelled"
-export type KycStatus = "pending" | "approved" | "rejected" | "expired"
-export type LinkType = "device" | "ip" | "payment_method" | "phone" | "email_domain" | "address_zip" | "creation_time"
-export type FraudSeverity = "low" | "medium" | "high" | "critical"
-export type AddressType = "stripe_connected_account" | "bank_account" | "wallet"
-export type FeeTier = "standard" | "established" | "elite"
-export type PayoutStatus = "pending" | "in_transit" | "paid" | "failed" | "reversed"
-
-export interface Database {
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   public: {
     Tables: {
       account_links: {
         Row: {
-          id: string
-          user_id_1: string
-          user_id_2: string
-          link_type: string
           confidence_score: number
           flagged_at: string
-          reviewed_at: string | null
+          id: string
+          link_type: string
           review_action: string | null
-        }
-        Insert: {
-          id?: string
+          reviewed_at: string | null
           user_id_1: string
           user_id_2: string
-          link_type: string
+        }
+        Insert: {
           confidence_score: number
           flagged_at?: string
-          reviewed_at?: string | null
+          id?: string
+          link_type: string
           review_action?: string | null
+          reviewed_at?: string | null
+          user_id_1: string
+          user_id_2: string
         }
         Update: {
-          id?: string
-          user_id_1?: string
-          user_id_2?: string
-          link_type?: string
           confidence_score?: number
           flagged_at?: string
-          reviewed_at?: string | null
+          id?: string
+          link_type?: string
           review_action?: string | null
+          reviewed_at?: string | null
+          user_id_1?: string
+          user_id_2?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "account_links_user_id_1_fkey"
+            columns: ["user_id_1"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_links_user_id_1_fkey"
+            columns: ["user_id_1"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_links_user_id_1_fkey"
+            columns: ["user_id_1"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_links_user_id_2_fkey"
+            columns: ["user_id_2"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_links_user_id_2_fkey"
+            columns: ["user_id_2"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_links_user_id_2_fkey"
+            columns: ["user_id_2"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       automation_refunds: {
         Row: {
           id: string
+          match_id: string | null
+          paid_at: string | null
+          refund_cents: number
           review_id: string
           victim_user_id: string
-          match_id: string | null
-          refund_cents: number
-          paid_at: string | null
         }
         Insert: {
           id?: string
+          match_id?: string | null
+          paid_at?: string | null
+          refund_cents: number
           review_id: string
           victim_user_id: string
-          match_id?: string | null
-          refund_cents: number
-          paid_at?: string | null
         }
         Update: {
           id?: string
+          match_id?: string | null
+          paid_at?: string | null
+          refund_cents?: number
           review_id?: string
           victim_user_id?: string
-          match_id?: string | null
-          refund_cents?: number
-          paid_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "automation_refunds_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_refunds_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: false
+            referencedRelation: "automation_reviews"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_refunds_victim_user_id_fkey"
+            columns: ["victim_user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_refunds_victim_user_id_fkey"
+            columns: ["victim_user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_refunds_victim_user_id_fkey"
+            columns: ["victim_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       automation_reviews: {
         Row: {
-          id: string
-          user_id: string
-          suspicion_score: number
           action: string
-          latency_std_dev_ms: number | null
-          optimal_move_rate: number | null
-          longest_session_hours: number | null
           active_hours_spread: number | null
+          id: string
+          latency_std_dev_ms: number | null
+          longest_session_hours: number | null
           matches_sampled: number
           opened_at: string
-          resolved_at: string | null
+          optimal_move_rate: number | null
           resolution: string | null
+          resolved_at: string | null
           reviewer_note: string | null
+          suspicion_score: number
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          suspicion_score: number
           action: string
-          latency_std_dev_ms?: number | null
-          optimal_move_rate?: number | null
-          longest_session_hours?: number | null
           active_hours_spread?: number | null
+          id?: string
+          latency_std_dev_ms?: number | null
+          longest_session_hours?: number | null
           matches_sampled: number
           opened_at?: string
-          resolved_at?: string | null
+          optimal_move_rate?: number | null
           resolution?: string | null
+          resolved_at?: string | null
           reviewer_note?: string | null
+          suspicion_score: number
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
-          suspicion_score?: number
           action?: string
-          latency_std_dev_ms?: number | null
-          optimal_move_rate?: number | null
-          longest_session_hours?: number | null
           active_hours_spread?: number | null
+          id?: string
+          latency_std_dev_ms?: number | null
+          longest_session_hours?: number | null
           matches_sampled?: number
           opened_at?: string
-          resolved_at?: string | null
+          optimal_move_rate?: number | null
           resolution?: string | null
+          resolved_at?: string | null
           reviewer_note?: string | null
+          suspicion_score?: number
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "automation_reviews_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_reviews_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_reviews_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       balance_entries: {
         Row: {
-          id: string
-          user_id: string
           amount_cents: number
           balance_after_cents: number
-          reason: string
+          created_at: string
+          id: string
+          idempotency_key: string
           match_id: string | null
+          reason: string
           tournament_id: string | null
           transaction_id: string | null
-          idempotency_key: string
-          created_at: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
           amount_cents: number
           balance_after_cents: number
-          reason: string
+          created_at?: string
+          id?: string
+          idempotency_key: string
           match_id?: string | null
+          reason: string
           tournament_id?: string | null
           transaction_id?: string | null
-          idempotency_key: string
-          created_at?: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
           amount_cents?: number
           balance_after_cents?: number
-          reason?: string
+          created_at?: string
+          id?: string
+          idempotency_key?: string
           match_id?: string | null
+          reason?: string
           tournament_id?: string | null
           transaction_id?: string | null
-          idempotency_key?: string
-          created_at?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "balance_entries_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "balance_entries_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "balance_entries_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "balance_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "balance_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "balance_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       challenge_preferences: {
         Row: {
-          user_id: string
           accepts_challenges: boolean
-          min_stake_cents: number | null
           max_stake_cents: number | null
+          min_stake_cents: number | null
           updated_at: string
+          user_id: string
         }
         Insert: {
-          user_id: string
           accepts_challenges?: boolean
-          min_stake_cents?: number | null
           max_stake_cents?: number | null
+          min_stake_cents?: number | null
           updated_at?: string
+          user_id: string
         }
         Update: {
-          user_id?: string
           accepts_challenges?: boolean
-          min_stake_cents?: number | null
           max_stake_cents?: number | null
+          min_stake_cents?: number | null
           updated_at?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "challenge_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "challenge_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "challenge_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       challenges: {
         Row: {
-          id: string
           challenger_id: string
-          target_id: string
-          stake_cents: number
-          ruleset_id: string
-          status: string
           created_at: string
-          responded_at: string | null
           expires_at: string
+          id: string
           match_id: string | null
+          responded_at: string | null
+          ruleset_id: string
+          stake_cents: number
+          status: string
+          target_id: string
         }
         Insert: {
-          id?: string
           challenger_id: string
-          target_id: string
-          stake_cents: number
-          ruleset_id: string
-          status?: string
           created_at?: string
-          responded_at?: string | null
           expires_at: string
+          id?: string
           match_id?: string | null
+          responded_at?: string | null
+          ruleset_id: string
+          stake_cents: number
+          status?: string
+          target_id: string
         }
         Update: {
-          id?: string
           challenger_id?: string
-          target_id?: string
-          stake_cents?: number
-          ruleset_id?: string
-          status?: string
           created_at?: string
-          responded_at?: string | null
           expires_at?: string
+          id?: string
           match_id?: string | null
+          responded_at?: string | null
+          ruleset_id?: string
+          stake_cents?: number
+          status?: string
+          target_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "challenges_challenger_id_fkey"
+            columns: ["challenger_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "challenges_challenger_id_fkey"
+            columns: ["challenger_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "challenges_challenger_id_fkey"
+            columns: ["challenger_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "challenges_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "challenges_ruleset_id_fkey"
+            columns: ["ruleset_id"]
+            isOneToOne: false
+            referencedRelation: "rulesets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "challenges_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "challenges_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "challenges_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       comeback_claims: {
         Row: {
-          id: string
-          user_id: string
+          claimed_at: string
           consecutive_losses: number
+          id: string
+          median_stake_cents: number
           played_losses: number
           refund_cents: number
-          median_stake_cents: number
-          claimed_at: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
+          claimed_at?: string
           consecutive_losses: number
+          id?: string
+          median_stake_cents: number
           played_losses: number
           refund_cents: number
-          median_stake_cents: number
-          claimed_at?: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
+          claimed_at?: string
           consecutive_losses?: number
+          id?: string
+          median_stake_cents?: number
           played_losses?: number
           refund_cents?: number
-          median_stake_cents?: number
-          claimed_at?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "comeback_claims_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comeback_claims_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comeback_claims_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       contest_eligibility_rules: {
         Row: {
+          enforce_account_links: boolean
           kind: string
-          requires_kyc: boolean
+          max_link_confidence: number
           min_account_age_hours: number
           min_ranked_matches: number
-          enforce_account_links: boolean
-          max_link_confidence: number
+          requires_kyc: boolean
         }
         Insert: {
+          enforce_account_links?: boolean
           kind: string
-          requires_kyc?: boolean
+          max_link_confidence?: number
           min_account_age_hours?: number
           min_ranked_matches?: number
-          enforce_account_links?: boolean
-          max_link_confidence?: number
+          requires_kyc?: boolean
         }
         Update: {
+          enforce_account_links?: boolean
           kind?: string
-          requires_kyc?: boolean
+          max_link_confidence?: number
           min_account_age_hours?: number
           min_ranked_matches?: number
-          enforce_account_links?: boolean
-          max_link_confidence?: number
+          requires_kyc?: boolean
         }
         Relationships: []
       }
       deposit_velocity: {
         Row: {
-          user_id: string
-          window_date: string
           deposited_cents: number
           net_loss_cents: number
-        }
-        Insert: {
           user_id: string
           window_date: string
+        }
+        Insert: {
           deposited_cents?: number
           net_loss_cents?: number
+          user_id: string
+          window_date: string
         }
         Update: {
-          user_id?: string
-          window_date?: string
           deposited_cents?: number
           net_loss_cents?: number
+          user_id?: string
+          window_date?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "deposit_velocity_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_velocity_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_velocity_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       device_fingerprints: {
         Row: {
-          id: string
-          user_id: string
           fingerprint_hash: string
-          user_agent: string
-          ip_address: string
-          timezone: string | null
-          language: string | null
           first_seen_at: string
-          last_seen_at: string
+          id: string
+          ip_address: unknown
           is_primary: boolean
+          language: string | null
+          last_seen_at: string
+          timezone: string | null
+          user_agent: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
           fingerprint_hash: string
-          user_agent: string
-          ip_address: string
-          timezone?: string | null
-          language?: string | null
           first_seen_at?: string
-          last_seen_at?: string
+          id?: string
+          ip_address: unknown
           is_primary?: boolean
+          language?: string | null
+          last_seen_at?: string
+          timezone?: string | null
+          user_agent: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
           fingerprint_hash?: string
-          user_agent?: string
-          ip_address?: string
-          timezone?: string | null
-          language?: string | null
           first_seen_at?: string
-          last_seen_at?: string
+          id?: string
+          ip_address?: unknown
           is_primary?: boolean
+          language?: string | null
+          last_seen_at?: string
+          timezone?: string | null
+          user_agent?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "device_fingerprints_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "device_fingerprints_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "device_fingerprints_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       elo_ratings_history: {
         Row: {
-          id: string
-          user_id: string
-          match_id: string
-          elo_before: number
-          elo_after: number
           change: number
           created_at: string
+          elo_after: number
+          elo_before: number
+          id: string
+          match_id: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          match_id: string
-          elo_before: number
-          elo_after: number
           change: number
           created_at?: string
+          elo_after: number
+          elo_before: number
+          id?: string
+          match_id: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
-          match_id?: string
-          elo_before?: number
-          elo_after?: number
           change?: number
           created_at?: string
+          elo_after?: number
+          elo_before?: number
+          id?: string
+          match_id?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "elo_ratings_history_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "elo_ratings_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "elo_ratings_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "elo_ratings_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       exclusion_identifiers: {
         Row: {
-          id: string
-          self_exclusion_id: string
-          identifier_type: string
-          identifier_hash: string
           created_at: string
+          id: string
+          identifier_hash: string
+          identifier_type: string
+          self_exclusion_id: string
         }
         Insert: {
-          id?: string
-          self_exclusion_id: string
-          identifier_type: string
-          identifier_hash: string
           created_at?: string
+          id?: string
+          identifier_hash: string
+          identifier_type: string
+          self_exclusion_id: string
         }
         Update: {
-          id?: string
-          self_exclusion_id?: string
-          identifier_type?: string
-          identifier_hash?: string
           created_at?: string
+          id?: string
+          identifier_hash?: string
+          identifier_type?: string
+          self_exclusion_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "exclusion_identifiers_self_exclusion_id_fkey"
+            columns: ["self_exclusion_id"]
+            isOneToOne: false
+            referencedRelation: "self_exclusions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       fraud_flags: {
         Row: {
-          id: string
-          user_id: string
           flag_type: string
-          severity: string
+          id: string
           reason: string | null
-          triggered_at: string
-          reviewed_at: string | null
           review_action: string | null
+          reviewed_at: string | null
+          severity: string
+          triggered_at: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
           flag_type: string
-          severity: string
+          id?: string
           reason?: string | null
-          triggered_at?: string
-          reviewed_at?: string | null
           review_action?: string | null
+          reviewed_at?: string | null
+          severity: string
+          triggered_at?: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
           flag_type?: string
-          severity?: string
+          id?: string
           reason?: string | null
-          triggered_at?: string
-          reviewed_at?: string | null
           review_action?: string | null
+          reviewed_at?: string | null
+          severity?: string
+          triggered_at?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fraud_flags_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fraud_flags_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fraud_flags_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ip_blocks: {
         Row: {
-          id: string
-          ip_address: string
-          reason: string | null
           added_at: string
           expires_at: string | null
+          id: string
+          ip_address: unknown
+          reason: string | null
         }
         Insert: {
-          id?: string
-          ip_address: string
-          reason?: string | null
           added_at?: string
           expires_at?: string | null
+          id?: string
+          ip_address: unknown
+          reason?: string | null
         }
         Update: {
-          id?: string
-          ip_address?: string
-          reason?: string | null
           added_at?: string
           expires_at?: string | null
+          id?: string
+          ip_address?: unknown
+          reason?: string | null
         }
         Relationships: []
       }
       jurisdiction_rules: {
         Row: {
-          id: string
           country_code: string
-          region_code: string | null
-          paid_entry_allowed: boolean
           free_play_allowed: boolean
+          id: string
           minimum_age: number
           notes: string | null
+          paid_entry_allowed: boolean
+          region_code: string | null
           updated_at: string
         }
         Insert: {
-          id?: string
           country_code: string
-          region_code?: string | null
-          paid_entry_allowed: boolean
           free_play_allowed?: boolean
+          id?: string
           minimum_age?: number
           notes?: string | null
+          paid_entry_allowed: boolean
+          region_code?: string | null
           updated_at?: string
         }
         Update: {
-          id?: string
           country_code?: string
-          region_code?: string | null
-          paid_entry_allowed?: boolean
           free_play_allowed?: boolean
+          id?: string
           minimum_age?: number
           notes?: string | null
+          paid_entry_allowed?: boolean
+          region_code?: string | null
           updated_at?: string
         }
         Relationships: []
       }
       kyc_records: {
         Row: {
+          country_code: string | null
+          created_at: string
+          date_of_birth: string | null
+          expires_at: string | null
+          full_name: string | null
           id: string
-          user_id: string
+          id_number_hash: string | null
+          id_type: string | null
           provider: string
           provider_verification_id: string
-          status: string
-          full_name: string | null
-          date_of_birth: string | null
-          country_code: string | null
-          id_type: string | null
-          id_number_hash: string | null
-          sanction_check_passed: boolean | null
           sanction_check_at: string | null
+          sanction_check_passed: boolean | null
+          status: string
+          user_id: string
           verified_at: string | null
-          expires_at: string | null
-          created_at: string
         }
         Insert: {
+          country_code?: string | null
+          created_at?: string
+          date_of_birth?: string | null
+          expires_at?: string | null
+          full_name?: string | null
           id?: string
-          user_id: string
+          id_number_hash?: string | null
+          id_type?: string | null
           provider: string
           provider_verification_id: string
-          status: string
-          full_name?: string | null
-          date_of_birth?: string | null
-          country_code?: string | null
-          id_type?: string | null
-          id_number_hash?: string | null
-          sanction_check_passed?: boolean | null
           sanction_check_at?: string | null
+          sanction_check_passed?: boolean | null
+          status: string
+          user_id: string
           verified_at?: string | null
-          expires_at?: string | null
-          created_at?: string
         }
         Update: {
+          country_code?: string | null
+          created_at?: string
+          date_of_birth?: string | null
+          expires_at?: string | null
+          full_name?: string | null
           id?: string
-          user_id?: string
+          id_number_hash?: string | null
+          id_type?: string | null
           provider?: string
           provider_verification_id?: string
-          status?: string
-          full_name?: string | null
-          date_of_birth?: string | null
-          country_code?: string | null
-          id_type?: string | null
-          id_number_hash?: string | null
-          sanction_check_passed?: boolean | null
           sanction_check_at?: string | null
+          sanction_check_passed?: boolean | null
+          status?: string
+          user_id?: string
           verified_at?: string | null
-          expires_at?: string | null
-          created_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "kyc_records_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kyc_records_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kyc_records_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ladder_rung_results: {
         Row: {
+          bank_value_cents: number
           id: string
+          match_id: string | null
+          played_at: string
           run_id: string
           rung: number
-          match_id: string | null
           won: boolean
-          bank_value_cents: number
-          played_at: string
         }
         Insert: {
+          bank_value_cents: number
           id?: string
+          match_id?: string | null
+          played_at?: string
           run_id: string
           rung: number
-          match_id?: string | null
           won: boolean
-          bank_value_cents: number
-          played_at?: string
         }
         Update: {
+          bank_value_cents?: number
           id?: string
+          match_id?: string | null
+          played_at?: string
           run_id?: string
           rung?: number
-          match_id?: string | null
           won?: boolean
-          bank_value_cents?: number
-          played_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ladder_rung_results_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ladder_rung_results_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "ladder_runs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ladder_runs: {
         Row: {
-          id: string
-          user_id: string
-          ruleset_id: string
-          entry_fee_cents: number
-          current_rung: number
-          max_rung: number
-          status: string
           banked_cents: number | null
-          started_at: string
+          current_rung: number
           ended_at: string | null
+          entry_fee_cents: number
+          id: string
+          max_rung: number
+          ruleset_id: string
+          started_at: string
+          status: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          ruleset_id: string
-          entry_fee_cents: number
-          current_rung?: number
-          max_rung: number
-          status?: string
           banked_cents?: number | null
-          started_at?: string
+          current_rung?: number
           ended_at?: string | null
+          entry_fee_cents: number
+          id?: string
+          max_rung: number
+          ruleset_id: string
+          started_at?: string
+          status?: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
-          ruleset_id?: string
-          entry_fee_cents?: number
-          current_rung?: number
-          max_rung?: number
-          status?: string
           banked_cents?: number | null
-          started_at?: string
+          current_rung?: number
           ended_at?: string | null
+          entry_fee_cents?: number
+          id?: string
+          max_rung?: number
+          ruleset_id?: string
+          started_at?: string
+          status?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ladder_runs_ruleset_id_fkey"
+            columns: ["ruleset_id"]
+            isOneToOne: false
+            referencedRelation: "rulesets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ladder_runs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ladder_runs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ladder_runs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      loyalty_points: {
+        Row: {
+          balance_cents: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance_cents?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance_cents?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loyalty_points_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_points_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_points_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      loyalty_points_entries: {
+        Row: {
+          amount_cents: number
+          balance_after_cents: number
+          created_at: string
+          id: string
+          idempotency_key: string
+          match_id: string | null
+          reason: string
+          tournament_id: string | null
+          user_id: string
+        }
+        Insert: {
+          amount_cents: number
+          balance_after_cents: number
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          match_id?: string | null
+          reason: string
+          tournament_id?: string | null
+          user_id: string
+        }
+        Update: {
+          amount_cents?: number
+          balance_after_cents?: number
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          match_id?: string | null
+          reason?: string
+          tournament_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loyalty_points_entries_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_points_entries_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_points_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_points_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_points_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      match_disputes: {
+        Row: {
+          adjustment_cents: number | null
+          created_at: string
+          filed_by_user_id: string
+          id: string
+          match_id: string
+          reason: string
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by_user_id: string | null
+          status: string
+        }
+        Insert: {
+          adjustment_cents?: number | null
+          created_at?: string
+          filed_by_user_id: string
+          id?: string
+          match_id: string
+          reason: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by_user_id?: string | null
+          status?: string
+        }
+        Update: {
+          adjustment_cents?: number | null
+          created_at?: string
+          filed_by_user_id?: string
+          id?: string
+          match_id?: string
+          reason?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by_user_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_disputes_filed_by_user_id_fkey"
+            columns: ["filed_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_disputes_filed_by_user_id_fkey"
+            columns: ["filed_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_disputes_filed_by_user_id_fkey"
+            columns: ["filed_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_disputes_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_disputes_resolved_by_user_id_fkey"
+            columns: ["resolved_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_disputes_resolved_by_user_id_fkey"
+            columns: ["resolved_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_disputes_resolved_by_user_id_fkey"
+            columns: ["resolved_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       match_replays: {
         Row: {
+          created_at: string
           id: string
           match_id: string
-          replay_data: Json
           move_sequence: string[] | null
           player_1_timings: number[] | null
           player_2_timings: number[] | null
-          created_at: string
+          replay_data: Json
         }
         Insert: {
+          created_at?: string
           id?: string
           match_id: string
-          replay_data: Json
           move_sequence?: string[] | null
           player_1_timings?: number[] | null
           player_2_timings?: number[] | null
-          created_at?: string
+          replay_data: Json
         }
         Update: {
+          created_at?: string
           id?: string
           match_id?: string
-          replay_data?: Json
           move_sequence?: string[] | null
           player_1_timings?: number[] | null
           player_2_timings?: number[] | null
-          created_at?: string
+          replay_data?: Json
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "match_replays_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: true
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       matches: {
         Row: {
-          id: string
-          player_1_id: string
-          player_2_id: string
-          winner_id: string
-          loser_id: string
+          completed_at: string
+          created_at: string
+          dispute_resolution: string | null
+          duration_seconds: number | null
+          elo_change_loser: number | null
+          elo_change_winner: number | null
           entry_fee_cents: number
-          winner_payout_cents: number
+          id: string
+          loser_id: string
           loser_payout_cents: number
           platform_rake_cents: number
-          ranked: boolean
-          elo_change_winner: number | null
-          elo_change_loser: number | null
-          duration_seconds: number | null
-          reported: boolean
-          dispute_resolution: string | null
-          created_at: string
-          completed_at: string
-        }
-        Insert: {
-          id?: string
           player_1_id: string
           player_2_id: string
+          ranked: boolean
+          reported: boolean
           winner_id: string
-          loser_id: string
-          entry_fee_cents: number
           winner_payout_cents: number
+        }
+        Insert: {
+          completed_at?: string
+          created_at?: string
+          dispute_resolution?: string | null
+          duration_seconds?: number | null
+          elo_change_loser?: number | null
+          elo_change_winner?: number | null
+          entry_fee_cents: number
+          id?: string
+          loser_id: string
           loser_payout_cents?: number
           platform_rake_cents: number
+          player_1_id: string
+          player_2_id: string
           ranked?: boolean
-          elo_change_winner?: number | null
-          elo_change_loser?: number | null
-          duration_seconds?: number | null
           reported?: boolean
-          dispute_resolution?: string | null
-          created_at?: string
-          completed_at?: string
+          winner_id: string
+          winner_payout_cents: number
         }
         Update: {
-          id?: string
-          player_1_id?: string
-          player_2_id?: string
-          winner_id?: string
-          loser_id?: string
+          completed_at?: string
+          created_at?: string
+          dispute_resolution?: string | null
+          duration_seconds?: number | null
+          elo_change_loser?: number | null
+          elo_change_winner?: number | null
           entry_fee_cents?: number
-          winner_payout_cents?: number
+          id?: string
+          loser_id?: string
           loser_payout_cents?: number
           platform_rake_cents?: number
+          player_1_id?: string
+          player_2_id?: string
           ranked?: boolean
-          elo_change_winner?: number | null
-          elo_change_loser?: number | null
-          duration_seconds?: number | null
           reported?: boolean
-          dispute_resolution?: string | null
-          created_at?: string
-          completed_at?: string
+          winner_id?: string
+          winner_payout_cents?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "matches_loser_id_fkey"
+            columns: ["loser_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_loser_id_fkey"
+            columns: ["loser_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_loser_id_fkey"
+            columns: ["loser_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_player_1_id_fkey"
+            columns: ["player_1_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_player_1_id_fkey"
+            columns: ["player_1_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_player_1_id_fkey"
+            columns: ["player_1_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_player_2_id_fkey"
+            columns: ["player_2_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_player_2_id_fkey"
+            columns: ["player_2_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_player_2_id_fkey"
+            columns: ["player_2_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_winner_id_fkey"
+            columns: ["winner_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_winner_id_fkey"
+            columns: ["winner_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_winner_id_fkey"
+            columns: ["winner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payment_method_blocks: {
         Row: {
+          added_at: string
+          expires_at: string | null
           id: string
           payment_method_hash: string
           reason: string | null
-          added_at: string
-          expires_at: string | null
         }
         Insert: {
+          added_at?: string
+          expires_at?: string | null
           id?: string
           payment_method_hash: string
           reason?: string | null
-          added_at?: string
-          expires_at?: string | null
         }
         Update: {
+          added_at?: string
+          expires_at?: string | null
           id?: string
           payment_method_hash?: string
           reason?: string | null
-          added_at?: string
-          expires_at?: string | null
         }
         Relationships: []
       }
       payouts: {
         Row: {
-          id: string
-          user_id: string
           amount_cents: number
-          stripe_transfer_id: string | null
-          status: string
-          failure_reason: string | null
-          requested_at: string
           completed_at: string | null
+          failure_reason: string | null
+          id: string
+          requested_at: string
+          status: string
+          stripe_transfer_id: string | null
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
           amount_cents: number
-          stripe_transfer_id?: string | null
-          status?: string
-          failure_reason?: string | null
-          requested_at?: string
           completed_at?: string | null
+          failure_reason?: string | null
+          id?: string
+          requested_at?: string
+          status?: string
+          stripe_transfer_id?: string | null
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
           amount_cents?: number
-          stripe_transfer_id?: string | null
-          status?: string
-          failure_reason?: string | null
-          requested_at?: string
           completed_at?: string | null
+          failure_reason?: string | null
+          id?: string
+          requested_at?: string
+          status?: string
+          stripe_transfer_id?: string | null
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "payouts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payouts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payouts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       personal_bests: {
         Row: {
-          user_id: string
-          longest_win_streak: number
-          current_win_streak: number
-          current_loss_streak: number
-          highest_elo: number
-          biggest_upset_elo: number
-          fastest_win_seconds: number | null
           best_finish_place: number | null
-          total_matches: number
+          biggest_upset_elo: number
+          current_loss_streak: number
+          current_win_streak: number
+          fastest_win_seconds: number | null
+          highest_elo: number
+          longest_win_streak: number
           net_profit_cents: number
+          total_matches: number
           updated_at: string
+          user_id: string
         }
         Insert: {
-          user_id: string
-          longest_win_streak?: number
-          current_win_streak?: number
-          current_loss_streak?: number
-          highest_elo?: number
-          biggest_upset_elo?: number
-          fastest_win_seconds?: number | null
           best_finish_place?: number | null
-          total_matches?: number
+          biggest_upset_elo?: number
+          current_loss_streak?: number
+          current_win_streak?: number
+          fastest_win_seconds?: number | null
+          highest_elo?: number
+          longest_win_streak?: number
           net_profit_cents?: number
+          total_matches?: number
           updated_at?: string
+          user_id: string
         }
         Update: {
-          user_id?: string
-          longest_win_streak?: number
-          current_win_streak?: number
-          current_loss_streak?: number
-          highest_elo?: number
-          biggest_upset_elo?: number
-          fastest_win_seconds?: number | null
           best_finish_place?: number | null
-          total_matches?: number
+          biggest_upset_elo?: number
+          current_loss_streak?: number
+          current_win_streak?: number
+          fastest_win_seconds?: number | null
+          highest_elo?: number
+          longest_win_streak?: number
           net_profit_cents?: number
+          total_matches?: number
           updated_at?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "personal_bests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "personal_bests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "personal_bests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       phone_verifications: {
         Row: {
-          id: string
-          user_id: string
-          phone_number: string
           carrier_name: string | null
-          is_voip: boolean
-          phone_age_days: number | null
-          verification_attempts: number
-          last_attempt_at: string | null
-          verified_at: string | null
           created_at: string
+          id: string
+          is_voip: boolean
+          last_attempt_at: string | null
+          phone_age_days: number | null
+          phone_number: string
+          user_id: string
+          verification_attempts: number
+          verified_at: string | null
         }
         Insert: {
-          id?: string
-          user_id: string
-          phone_number: string
           carrier_name?: string | null
-          is_voip?: boolean
-          phone_age_days?: number | null
-          verification_attempts?: number
-          last_attempt_at?: string | null
-          verified_at?: string | null
           created_at?: string
+          id?: string
+          is_voip?: boolean
+          last_attempt_at?: string | null
+          phone_age_days?: number | null
+          phone_number: string
+          user_id: string
+          verification_attempts?: number
+          verified_at?: string | null
         }
         Update: {
-          id?: string
-          user_id?: string
-          phone_number?: string
           carrier_name?: string | null
-          is_voip?: boolean
-          phone_age_days?: number | null
-          verification_attempts?: number
-          last_attempt_at?: string | null
-          verified_at?: string | null
           created_at?: string
+          id?: string
+          is_voip?: boolean
+          last_attempt_at?: string | null
+          phone_age_days?: number | null
+          phone_number?: string
+          user_id?: string
+          verification_attempts?: number
+          verified_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "phone_verifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phone_verifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phone_verifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       platform_ledger: {
         Row: {
-          id: string
-          entry_type: string
           amount_cents: number
-          match_id: string | null
-          tournament_id: string | null
-          note: string | null
           created_at: string
+          entry_type: string
+          id: string
+          match_id: string | null
+          note: string | null
+          tournament_id: string | null
         }
         Insert: {
-          id?: string
-          entry_type: string
           amount_cents: number
-          match_id?: string | null
-          tournament_id?: string | null
-          note?: string | null
           created_at?: string
+          entry_type: string
+          id?: string
+          match_id?: string | null
+          note?: string | null
+          tournament_id?: string | null
         }
         Update: {
-          id?: string
-          entry_type?: string
           amount_cents?: number
-          match_id?: string | null
-          tournament_id?: string | null
-          note?: string | null
           created_at?: string
+          entry_type?: string
+          id?: string
+          match_id?: string | null
+          note?: string | null
+          tournament_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "platform_ledger_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_ledger_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       play_sessions: {
         Row: {
-          id: string
-          user_id: string
-          started_at: string
           ended_at: string | null
+          id: string
+          last_reality_check_at: string | null
           matches_played: number
           net_result_cents: number
-          last_reality_check_at: string | null
           reality_checks_shown: number
+          started_at: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          started_at?: string
           ended_at?: string | null
+          id?: string
+          last_reality_check_at?: string | null
           matches_played?: number
           net_result_cents?: number
-          last_reality_check_at?: string | null
           reality_checks_shown?: number
+          started_at?: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
-          started_at?: string
           ended_at?: string | null
+          id?: string
+          last_reality_check_at?: string | null
           matches_played?: number
           net_result_cents?: number
-          last_reality_check_at?: string | null
           reality_checks_shown?: number
+          started_at?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "play_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "play_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "play_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       player_limits: {
         Row: {
-          user_id: string
           daily_deposit_limit_cents: number | null
-          weekly_deposit_limit_cents: number | null
-          monthly_deposit_limit_cents: number | null
           daily_loss_limit_cents: number | null
-          weekly_loss_limit_cents: number | null
-          session_duration_limit_minutes: number | null
+          monthly_deposit_limit_cents: number | null
           pending_daily_deposit_limit_cents: number | null
-          pending_weekly_deposit_limit_cents: number | null
-          pending_monthly_deposit_limit_cents: number | null
           pending_daily_loss_limit_cents: number | null
-          pending_weekly_loss_limit_cents: number | null
           pending_effective_at: string | null
+          pending_monthly_deposit_limit_cents: number | null
+          pending_weekly_deposit_limit_cents: number | null
+          pending_weekly_loss_limit_cents: number | null
+          session_duration_limit_minutes: number | null
           updated_at: string
+          user_id: string
+          weekly_deposit_limit_cents: number | null
+          weekly_loss_limit_cents: number | null
         }
         Insert: {
-          user_id: string
           daily_deposit_limit_cents?: number | null
-          weekly_deposit_limit_cents?: number | null
-          monthly_deposit_limit_cents?: number | null
           daily_loss_limit_cents?: number | null
-          weekly_loss_limit_cents?: number | null
-          session_duration_limit_minutes?: number | null
+          monthly_deposit_limit_cents?: number | null
           pending_daily_deposit_limit_cents?: number | null
-          pending_weekly_deposit_limit_cents?: number | null
-          pending_monthly_deposit_limit_cents?: number | null
           pending_daily_loss_limit_cents?: number | null
-          pending_weekly_loss_limit_cents?: number | null
           pending_effective_at?: string | null
+          pending_monthly_deposit_limit_cents?: number | null
+          pending_weekly_deposit_limit_cents?: number | null
+          pending_weekly_loss_limit_cents?: number | null
+          session_duration_limit_minutes?: number | null
           updated_at?: string
+          user_id: string
+          weekly_deposit_limit_cents?: number | null
+          weekly_loss_limit_cents?: number | null
         }
         Update: {
-          user_id?: string
           daily_deposit_limit_cents?: number | null
-          weekly_deposit_limit_cents?: number | null
-          monthly_deposit_limit_cents?: number | null
           daily_loss_limit_cents?: number | null
-          weekly_loss_limit_cents?: number | null
-          session_duration_limit_minutes?: number | null
+          monthly_deposit_limit_cents?: number | null
           pending_daily_deposit_limit_cents?: number | null
-          pending_weekly_deposit_limit_cents?: number | null
-          pending_monthly_deposit_limit_cents?: number | null
           pending_daily_loss_limit_cents?: number | null
-          pending_weekly_loss_limit_cents?: number | null
           pending_effective_at?: string | null
+          pending_monthly_deposit_limit_cents?: number | null
+          pending_weekly_deposit_limit_cents?: number | null
+          pending_weekly_loss_limit_cents?: number | null
+          session_duration_limit_minutes?: number | null
           updated_at?: string
+          user_id?: string
+          weekly_deposit_limit_cents?: number | null
+          weekly_loss_limit_cents?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "player_limits_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_limits_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_limits_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       player_rewards: {
         Row: {
-          id: string
-          user_id: string
-          reward_id: string
-          kind: string
-          earned_from_tournament_id: string | null
-          earned_at: string
-          expires_at: string | null
           consumed_at: string | null
+          earned_at: string
+          earned_from_tournament_id: string | null
+          expires_at: string | null
+          id: string
+          kind: string
+          reward_id: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          reward_id: string
-          kind: string
-          earned_from_tournament_id?: string | null
-          earned_at?: string
-          expires_at?: string | null
           consumed_at?: string | null
+          earned_at?: string
+          earned_from_tournament_id?: string | null
+          expires_at?: string | null
+          id?: string
+          kind: string
+          reward_id: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
-          reward_id?: string
-          kind?: string
-          earned_from_tournament_id?: string | null
-          earned_at?: string
-          expires_at?: string | null
           consumed_at?: string | null
+          earned_at?: string
+          earned_from_tournament_id?: string | null
+          expires_at?: string | null
+          id?: string
+          kind?: string
+          reward_id?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "player_rewards_earned_from_tournament_id_fkey"
+            columns: ["earned_from_tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_rewards_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_rewards_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_rewards_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       player_standing: {
         Row: {
-          user_id: string
-          skill_index: number
-          si_rating: number
-          si_opposition: number
-          si_consistency: number
-          si_volume: number
-          si_fair_play: number
-          skill_index_percentile: number | null
-          confidence: number
-          is_provisional: boolean
-          trust_score: number
-          trust_band: string
-          fee_tier: string
-          distinct_opponents: number
           average_opponent_elo: number | null
-          performance_std_dev: number | null
-          upheld_fair_play_findings: number
           computed_at: string
+          confidence: number
+          distinct_opponents: number
+          fee_tier: string
+          is_provisional: boolean
+          performance_std_dev: number | null
+          si_consistency: number
+          si_fair_play: number
+          si_opposition: number
+          si_rating: number
+          si_volume: number
+          skill_index: number
+          skill_index_percentile: number | null
+          trust_band: string
+          trust_score: number
+          upheld_fair_play_findings: number
+          user_id: string
         }
         Insert: {
-          user_id: string
-          skill_index?: number
-          si_rating?: number
-          si_opposition?: number
-          si_consistency?: number
-          si_volume?: number
-          si_fair_play?: number
-          skill_index_percentile?: number | null
-          confidence?: number
-          is_provisional?: boolean
-          trust_score?: number
-          trust_band?: string
-          fee_tier?: string
-          distinct_opponents?: number
           average_opponent_elo?: number | null
-          performance_std_dev?: number | null
-          upheld_fair_play_findings?: number
           computed_at?: string
+          confidence?: number
+          distinct_opponents?: number
+          fee_tier?: string
+          is_provisional?: boolean
+          performance_std_dev?: number | null
+          si_consistency?: number
+          si_fair_play?: number
+          si_opposition?: number
+          si_rating?: number
+          si_volume?: number
+          skill_index?: number
+          skill_index_percentile?: number | null
+          trust_band?: string
+          trust_score?: number
+          upheld_fair_play_findings?: number
+          user_id: string
         }
         Update: {
-          user_id?: string
-          skill_index?: number
-          si_rating?: number
-          si_opposition?: number
-          si_consistency?: number
-          si_volume?: number
-          si_fair_play?: number
-          skill_index_percentile?: number | null
-          confidence?: number
-          is_provisional?: boolean
-          trust_score?: number
-          trust_band?: string
-          fee_tier?: string
-          distinct_opponents?: number
           average_opponent_elo?: number | null
-          performance_std_dev?: number | null
-          upheld_fair_play_findings?: number
           computed_at?: string
+          confidence?: number
+          distinct_opponents?: number
+          fee_tier?: string
+          is_provisional?: boolean
+          performance_std_dev?: number | null
+          si_consistency?: number
+          si_fair_play?: number
+          si_opposition?: number
+          si_rating?: number
+          si_volume?: number
+          skill_index?: number
+          skill_index_percentile?: number | null
+          trust_band?: string
+          trust_score?: number
+          upheld_fair_play_findings?: number
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "player_standing_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_standing_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_standing_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       player_titles: {
         Row: {
+          earned_at: string
           id: string
-          user_id: string
+          is_equipped: boolean
           tier: string
           tournament_id: string | null
-          earned_at: string
-          is_equipped: boolean
+          user_id: string
         }
         Insert: {
+          earned_at?: string
           id?: string
-          user_id: string
+          is_equipped?: boolean
           tier: string
           tournament_id?: string | null
-          earned_at?: string
-          is_equipped?: boolean
+          user_id: string
         }
         Update: {
+          earned_at?: string
           id?: string
-          user_id?: string
+          is_equipped?: boolean
           tier?: string
           tournament_id?: string | null
-          earned_at?: string
-          is_equipped?: boolean
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "player_titles_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_titles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_titles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_titles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       playthrough_progress: {
         Row: {
+          completed_at: string | null
+          completed_playthrough_cents: number
+          expires_at: string
           id: string
+          qualifying_matches: number
+          required_playthrough_cents: number
           transaction_id: string
           user_id: string
-          required_playthrough_cents: number
-          completed_playthrough_cents: number
-          qualifying_matches: number
-          expires_at: string
-          completed_at: string | null
         }
         Insert: {
+          completed_at?: string | null
+          completed_playthrough_cents?: number
+          expires_at: string
           id?: string
+          qualifying_matches?: number
+          required_playthrough_cents: number
           transaction_id: string
           user_id: string
-          required_playthrough_cents: number
-          completed_playthrough_cents?: number
-          qualifying_matches?: number
-          expires_at: string
-          completed_at?: string | null
         }
         Update: {
+          completed_at?: string | null
+          completed_playthrough_cents?: number
+          expires_at?: string
           id?: string
+          qualifying_matches?: number
+          required_playthrough_cents?: number
           transaction_id?: string
           user_id?: string
-          required_playthrough_cents?: number
-          completed_playthrough_cents?: number
-          qualifying_matches?: number
-          expires_at?: string
-          completed_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "playthrough_progress_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: true
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "playthrough_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "playthrough_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "playthrough_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       processed_webhook_events: {
         Row: {
+          event_type: string
           id: string
+          processed_at: string
           provider: string
           provider_event_id: string
-          event_type: string
-          processed_at: string
         }
         Insert: {
+          event_type: string
           id?: string
+          processed_at?: string
           provider: string
           provider_event_id: string
-          event_type: string
-          processed_at?: string
         }
         Update: {
+          event_type?: string
           id?: string
+          processed_at?: string
           provider?: string
           provider_event_id?: string
-          event_type?: string
-          processed_at?: string
+        }
+        Relationships: []
+      }
+      rate_limit_counters: {
+        Row: {
+          bucket: string
+          count: number
+          rate_key: string
+          window_start: string
+        }
+        Insert: {
+          bucket: string
+          count?: number
+          rate_key: string
+          window_start?: string
+        }
+        Update: {
+          bucket?: string
+          count?: number
+          rate_key?: string
+          window_start?: string
         }
         Relationships: []
       }
       rivalries: {
         Row: {
-          user_id: string
-          opponent_id: string
-          wins: number
-          losses: number
           draws: number
-          net_cents: number
           last_played_at: string
+          losses: number
+          net_cents: number
+          opponent_id: string
+          user_id: string
+          wins: number
         }
         Insert: {
-          user_id: string
-          opponent_id: string
-          wins?: number
-          losses?: number
           draws?: number
-          net_cents?: number
           last_played_at?: string
+          losses?: number
+          net_cents?: number
+          opponent_id: string
+          user_id: string
+          wins?: number
         }
         Update: {
-          user_id?: string
-          opponent_id?: string
-          wins?: number
-          losses?: number
           draws?: number
-          net_cents?: number
           last_played_at?: string
+          losses?: number
+          net_cents?: number
+          opponent_id?: string
+          user_id?: string
+          wins?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "rivalries_opponent_id_fkey"
+            columns: ["opponent_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rivalries_opponent_id_fkey"
+            columns: ["opponent_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rivalries_opponent_id_fkey"
+            columns: ["opponent_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rivalries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rivalries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rivalries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       rulesets: {
         Row: {
-          id: string
-          name: string
+          blurb: string
           board_size: number
           connect_target: number
-          move_timeout_ms: number
+          id: string
+          inv_bomb: number
           inv_normal: number
           inv_shield: number
-          inv_bomb: number
           inv_swap: number
-          blurb: string
           is_active: boolean
+          move_timeout_ms: number
+          name: string
         }
         Insert: {
-          id: string
-          name: string
+          blurb: string
           board_size: number
           connect_target: number
-          move_timeout_ms: number
+          id: string
+          inv_bomb: number
           inv_normal: number
           inv_shield: number
-          inv_bomb: number
           inv_swap: number
-          blurb: string
           is_active?: boolean
+          move_timeout_ms: number
+          name: string
         }
         Update: {
-          id?: string
-          name?: string
+          blurb?: string
           board_size?: number
           connect_target?: number
-          move_timeout_ms?: number
+          id?: string
+          inv_bomb?: number
           inv_normal?: number
           inv_shield?: number
-          inv_bomb?: number
           inv_swap?: number
-          blurb?: string
           is_active?: boolean
+          move_timeout_ms?: number
+          name?: string
         }
         Relationships: []
       }
       satellite_seats: {
         Row: {
-          id: string
-          won_in_tournament_id: string
-          target_tournament_id: string
-          user_id: string
-          seat_value_cents: number
-          status: string
-          redeemed_at: string | null
           converted_to_cash_at: string | null
           created_at: string
-        }
-        Insert: {
-          id?: string
-          won_in_tournament_id: string
+          id: string
+          redeemed_at: string | null
+          seat_value_cents: number
+          status: string
           target_tournament_id: string
           user_id: string
+          won_in_tournament_id: string
+        }
+        Insert: {
+          converted_to_cash_at?: string | null
+          created_at?: string
+          id?: string
+          redeemed_at?: string | null
           seat_value_cents: number
           status?: string
-          redeemed_at?: string | null
-          converted_to_cash_at?: string | null
-          created_at?: string
+          target_tournament_id: string
+          user_id: string
+          won_in_tournament_id: string
         }
         Update: {
-          id?: string
-          won_in_tournament_id?: string
-          target_tournament_id?: string
-          user_id?: string
-          seat_value_cents?: number
-          status?: string
-          redeemed_at?: string | null
           converted_to_cash_at?: string | null
           created_at?: string
+          id?: string
+          redeemed_at?: string | null
+          seat_value_cents?: number
+          status?: string
+          target_tournament_id?: string
+          user_id?: string
+          won_in_tournament_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "satellite_seats_target_tournament_id_fkey"
+            columns: ["target_tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "satellite_seats_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "satellite_seats_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "satellite_seats_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "satellite_seats_won_in_tournament_id_fkey"
+            columns: ["won_in_tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       season_archive: {
         Row: {
-          id: string
-          season_id: string
-          user_id: string
+          archived_at: string
           final_rank: number
           final_skill_index: number
+          id: string
           matches_played: number
-          archived_at: string
+          season_id: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          season_id: string
-          user_id: string
+          archived_at?: string
           final_rank: number
           final_skill_index: number
+          id?: string
           matches_played: number
-          archived_at?: string
+          season_id: string
+          user_id: string
         }
         Update: {
-          id?: string
-          season_id?: string
-          user_id?: string
+          archived_at?: string
           final_rank?: number
           final_skill_index?: number
+          id?: string
           matches_played?: number
-          archived_at?: string
+          season_id?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "season_archive_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "season_archive_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "season_archive_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       self_exclusions: {
         Row: {
-          id: string
-          user_id: string
-          started_at: string
           expires_at: string | null
+          id: string
           is_permanent: boolean
           reason: string | null
+          started_at: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          started_at?: string
           expires_at?: string | null
+          id?: string
           is_permanent?: boolean
           reason?: string | null
+          started_at?: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
-          started_at?: string
           expires_at?: string | null
+          id?: string
           is_permanent?: boolean
           reason?: string | null
+          started_at?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "self_exclusions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "self_exclusions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "self_exclusions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       stake_reservations: {
         Row: {
-          id: string
-          user_id: string
           amount_cents: number
-          status: string
-          match_id: string | null
           created_at: string
+          id: string
+          match_id: string | null
           resolved_at: string | null
+          status: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
           amount_cents: number
-          status?: string
-          match_id?: string | null
           created_at?: string
+          id?: string
+          match_id?: string | null
           resolved_at?: string | null
+          status?: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
           amount_cents?: number
-          status?: string
-          match_id?: string | null
           created_at?: string
+          id?: string
+          match_id?: string | null
           resolved_at?: string | null
+          status?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "stake_reservations_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stake_reservations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stake_reservations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stake_reservations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tournament_bounties: {
         Row: {
+          amount_cents: number
+          claimed_at: string | null
+          claimed_by_user_id: string | null
+          claimed_in_match_id: string | null
+          head_user_id: string
           id: string
           tournament_id: string
-          head_user_id: string
-          amount_cents: number
-          claimed_by_user_id: string | null
-          claimed_at: string | null
-          claimed_in_match_id: string | null
         }
         Insert: {
+          amount_cents: number
+          claimed_at?: string | null
+          claimed_by_user_id?: string | null
+          claimed_in_match_id?: string | null
+          head_user_id: string
           id?: string
           tournament_id: string
-          head_user_id: string
-          amount_cents: number
-          claimed_by_user_id?: string | null
-          claimed_at?: string | null
-          claimed_in_match_id?: string | null
         }
         Update: {
+          amount_cents?: number
+          claimed_at?: string | null
+          claimed_by_user_id?: string | null
+          claimed_in_match_id?: string | null
+          head_user_id?: string
           id?: string
           tournament_id?: string
-          head_user_id?: string
-          amount_cents?: number
-          claimed_by_user_id?: string | null
-          claimed_at?: string | null
-          claimed_in_match_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tournament_bounties_claimed_by_user_id_fkey"
+            columns: ["claimed_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_bounties_claimed_by_user_id_fkey"
+            columns: ["claimed_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_bounties_claimed_by_user_id_fkey"
+            columns: ["claimed_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_bounties_claimed_in_match_id_fkey"
+            columns: ["claimed_in_match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_bounties_head_user_id_fkey"
+            columns: ["head_user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_bounties_head_user_id_fkey"
+            columns: ["head_user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_bounties_head_user_id_fkey"
+            columns: ["head_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_bounties_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tournament_entries: {
         Row: {
+          eliminated_at: string | null
+          entered_at: string
+          entry_fee_paid_cents: number
+          final_place: number | null
           id: string
+          seat_number: number
           tournament_id: string
           user_id: string
-          seat_number: number
-          entry_fee_paid_cents: number
-          entered_at: string
-          eliminated_at: string | null
-          final_place: number | null
         }
         Insert: {
+          eliminated_at?: string | null
+          entered_at?: string
+          entry_fee_paid_cents: number
+          final_place?: number | null
           id?: string
+          seat_number: number
           tournament_id: string
           user_id: string
-          seat_number: number
-          entry_fee_paid_cents: number
-          entered_at?: string
-          eliminated_at?: string | null
-          final_place?: number | null
         }
         Update: {
+          eliminated_at?: string | null
+          entered_at?: string
+          entry_fee_paid_cents?: number
+          final_place?: number | null
           id?: string
+          seat_number?: number
           tournament_id?: string
           user_id?: string
-          seat_number?: number
-          entry_fee_paid_cents?: number
-          entered_at?: string
-          eliminated_at?: string | null
-          final_place?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tournament_entries_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tournament_matches: {
         Row: {
+          board_position: number
+          created_at: string
           id: string
-          tournament_id: string
-          round_id: string
+          is_bye: boolean
           match_id: string | null
           player_1_id: string | null
           player_2_id: string | null
-          winner_id: string | null
-          is_bye: boolean
-          board_position: number
+          round_id: string
           status: string
-          created_at: string
+          tournament_id: string
+          winner_id: string | null
         }
         Insert: {
+          board_position: number
+          created_at?: string
           id?: string
-          tournament_id: string
-          round_id: string
+          is_bye?: boolean
           match_id?: string | null
           player_1_id?: string | null
           player_2_id?: string | null
-          winner_id?: string | null
-          is_bye?: boolean
-          board_position: number
+          round_id: string
           status?: string
-          created_at?: string
+          tournament_id: string
+          winner_id?: string | null
         }
         Update: {
+          board_position?: number
+          created_at?: string
           id?: string
-          tournament_id?: string
-          round_id?: string
+          is_bye?: boolean
           match_id?: string | null
           player_1_id?: string | null
           player_2_id?: string | null
-          winner_id?: string | null
-          is_bye?: boolean
-          board_position?: number
+          round_id?: string
           status?: string
-          created_at?: string
+          tournament_id?: string
+          winner_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tournament_matches_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_player_1_id_fkey"
+            columns: ["player_1_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_player_1_id_fkey"
+            columns: ["player_1_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_player_1_id_fkey"
+            columns: ["player_1_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_player_2_id_fkey"
+            columns: ["player_2_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_player_2_id_fkey"
+            columns: ["player_2_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_player_2_id_fkey"
+            columns: ["player_2_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_round_id_fkey"
+            columns: ["round_id"]
+            isOneToOne: false
+            referencedRelation: "tournament_rounds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_winner_id_fkey"
+            columns: ["winner_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_winner_id_fkey"
+            columns: ["winner_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_winner_id_fkey"
+            columns: ["winner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tournament_payouts: {
         Row: {
+          amount_cents: number
           id: string
+          paid_at: string
+          place: number
           tournament_id: string
           user_id: string
-          place: number
-          amount_cents: number
-          paid_at: string
         }
         Insert: {
+          amount_cents: number
           id?: string
+          paid_at?: string
+          place: number
           tournament_id: string
           user_id: string
-          place: number
-          amount_cents: number
-          paid_at?: string
         }
         Update: {
+          amount_cents?: number
           id?: string
+          paid_at?: string
+          place?: number
           tournament_id?: string
           user_id?: string
-          place?: number
-          amount_cents?: number
-          paid_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tournament_payouts_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_payouts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_payouts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_payouts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tournament_rounds: {
         Row: {
-          id: string
-          tournament_id: string
-          round_number: number
-          status: string
-          started_at: string | null
           completed_at: string | null
+          id: string
+          round_number: number
+          started_at: string | null
+          status: string
+          tournament_id: string
         }
         Insert: {
-          id?: string
-          tournament_id: string
-          round_number: number
-          status?: string
-          started_at?: string | null
           completed_at?: string | null
+          id?: string
+          round_number: number
+          started_at?: string | null
+          status?: string
+          tournament_id: string
         }
         Update: {
-          id?: string
-          tournament_id?: string
-          round_number?: number
-          status?: string
-          started_at?: string | null
           completed_at?: string | null
+          id?: string
+          round_number?: number
+          started_at?: string | null
+          status?: string
+          tournament_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tournament_rounds_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tournaments: {
         Row: {
+          bounty_per_head_cents: number
+          bounty_pool_cents: number
+          bounty_share_bps: number
+          completed_at: string | null
+          created_at: string
+          entry_fee_cents: number
+          field_size: number
+          format_id: string
+          gross_cents: number
+          guaranteed_pool_cents: number | null
           id: string
           kind: string
-          name: string
-          entry_fee_cents: number
-          field_size: number
-          rake_bps: number
-          gross_cents: number
-          rake_cents: number
-          prize_pool_cents: number
-          status: string
-          registration_opens_at: string
-          starts_at: string | null
-          completed_at: string | null
           milestone_index: number | null
-          created_at: string
-          format_id: string
-          ruleset_id: string
-          rounds: number
-          bounty_share_bps: number
-          bounty_pool_cents: number
-          bounty_per_head_cents: number
-          place_pool_cents: number | null
-          guaranteed_pool_cents: number | null
+          name: string
           overlay_cents: number
-          satellite_target_tournament_id: string | null
+          place_pool_cents: number | null
+          prize_pool_cents: number
+          rake_bps: number
+          rake_cents: number
+          registration_opens_at: string
+          rounds: number
+          ruleset_id: string
           satellite_seat_value_cents: number | null
+          satellite_target_tournament_id: string | null
+          starts_at: string | null
+          status: string
         }
         Insert: {
-          id?: string
-          kind: string
-          name: string
+          bounty_per_head_cents?: number
+          bounty_pool_cents?: number
+          bounty_share_bps?: number
+          completed_at?: string | null
+          created_at?: string
           entry_fee_cents: number
           field_size: number
-          rake_bps: number
-          gross_cents: number
-          rake_cents: number
-          prize_pool_cents: number
-          status?: string
-          registration_opens_at?: string
-          starts_at?: string | null
-          completed_at?: string | null
-          milestone_index?: number | null
-          created_at?: string
           format_id?: string
-          ruleset_id?: string
-          rounds?: number
-          bounty_share_bps?: number
-          bounty_pool_cents?: number
-          bounty_per_head_cents?: number
-          place_pool_cents?: number | null
+          gross_cents: number
           guaranteed_pool_cents?: number | null
+          id?: string
+          kind: string
+          milestone_index?: number | null
+          name: string
           overlay_cents?: number
-          satellite_target_tournament_id?: string | null
+          place_pool_cents?: number | null
+          prize_pool_cents: number
+          rake_bps: number
+          rake_cents: number
+          registration_opens_at?: string
+          rounds?: number
+          ruleset_id?: string
           satellite_seat_value_cents?: number | null
+          satellite_target_tournament_id?: string | null
+          starts_at?: string | null
+          status?: string
         }
         Update: {
-          id?: string
-          kind?: string
-          name?: string
+          bounty_per_head_cents?: number
+          bounty_pool_cents?: number
+          bounty_share_bps?: number
+          completed_at?: string | null
+          created_at?: string
           entry_fee_cents?: number
           field_size?: number
-          rake_bps?: number
-          gross_cents?: number
-          rake_cents?: number
-          prize_pool_cents?: number
-          status?: string
-          registration_opens_at?: string
-          starts_at?: string | null
-          completed_at?: string | null
-          milestone_index?: number | null
-          created_at?: string
           format_id?: string
-          ruleset_id?: string
-          rounds?: number
-          bounty_share_bps?: number
-          bounty_pool_cents?: number
-          bounty_per_head_cents?: number
-          place_pool_cents?: number | null
+          gross_cents?: number
           guaranteed_pool_cents?: number | null
+          id?: string
+          kind?: string
+          milestone_index?: number | null
+          name?: string
           overlay_cents?: number
-          satellite_target_tournament_id?: string | null
+          place_pool_cents?: number | null
+          prize_pool_cents?: number
+          rake_bps?: number
+          rake_cents?: number
+          registration_opens_at?: string
+          rounds?: number
+          ruleset_id?: string
           satellite_seat_value_cents?: number | null
+          satellite_target_tournament_id?: string | null
+          starts_at?: string | null
+          status?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tournaments_ruleset_id_fkey"
+            columns: ["ruleset_id"]
+            isOneToOne: false
+            referencedRelation: "rulesets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournaments_satellite_target_tournament_id_fkey"
+            columns: ["satellite_target_tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       transactions: {
         Row: {
-          id: string
-          user_id: string
-          type: string
           amount_cents: number
-          status: string
+          bonus_playthrough_completed_cents: number
+          bonus_playthrough_required_cents: number | null
+          completed_at: string | null
+          created_at: string
+          hold_until_at: string | null
+          id: string
+          is_bonus: boolean
           payment_provider: string | null
           provider_transaction_id: string | null
-          hold_until_at: string | null
-          is_bonus: boolean
-          bonus_playthrough_required_cents: number | null
-          bonus_playthrough_completed_cents: number
-          created_at: string
-          completed_at: string | null
+          status: string
+          type: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          type: string
           amount_cents: number
-          status?: string
+          bonus_playthrough_completed_cents?: number
+          bonus_playthrough_required_cents?: number | null
+          completed_at?: string | null
+          created_at?: string
+          hold_until_at?: string | null
+          id?: string
+          is_bonus?: boolean
           payment_provider?: string | null
           provider_transaction_id?: string | null
-          hold_until_at?: string | null
-          is_bonus?: boolean
-          bonus_playthrough_required_cents?: number | null
-          bonus_playthrough_completed_cents?: number
-          created_at?: string
-          completed_at?: string | null
+          status?: string
+          type: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
-          type?: string
           amount_cents?: number
-          status?: string
+          bonus_playthrough_completed_cents?: number
+          bonus_playthrough_required_cents?: number | null
+          completed_at?: string | null
+          created_at?: string
+          hold_until_at?: string | null
+          id?: string
+          is_bonus?: boolean
           payment_provider?: string | null
           provider_transaction_id?: string | null
-          hold_until_at?: string | null
-          is_bonus?: boolean
-          bonus_playthrough_required_cents?: number | null
-          bonus_playthrough_completed_cents?: number
-          created_at?: string
-          completed_at?: string | null
+          status?: string
+          type?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "transactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       users: {
         Row: {
-          id: string
-          username: string
-          email: string
+          account_status: string
           balance_cents: number
+          created_at: string
+          date_of_birth_self_attested: string | null
           elo_rating: number
+          email: string
+          id: string
+          is_admin: boolean
+          kyc_country: string | null
+          kyc_provider_user_id: string | null
+          kyc_verified: boolean
+          kyc_verified_at: string | null
           lifetime_deposits_cents: number
           lifetime_winnings_cents: number
           matches_played: number
           matches_won: number
-          phone_verified: boolean
           phone_number: string | null
-          kyc_verified: boolean
-          kyc_verified_at: string | null
-          kyc_provider_user_id: string | null
-          kyc_country: string | null
-          account_status: string
-          created_at: string
-          updated_at: string
-          date_of_birth_self_attested: string | null
-          terms_accepted_at: string | null
-          stripe_customer_id: string | null
+          phone_verified: boolean
           stripe_connect_account_id: string | null
-          stripe_connect_payouts_enabled: boolean
           stripe_connect_onboarded_at: string | null
+          stripe_connect_payouts_enabled: boolean
+          stripe_customer_id: string | null
+          terms_accepted_at: string | null
+          updated_at: string
+          username: string
         }
         Insert: {
-          id: string
-          username: string
-          email: string
+          account_status?: string
           balance_cents?: number
+          created_at?: string
+          date_of_birth_self_attested?: string | null
           elo_rating?: number
+          email: string
+          id: string
+          is_admin?: boolean
+          kyc_country?: string | null
+          kyc_provider_user_id?: string | null
+          kyc_verified?: boolean
+          kyc_verified_at?: string | null
           lifetime_deposits_cents?: number
           lifetime_winnings_cents?: number
           matches_played?: number
           matches_won?: number
-          phone_verified?: boolean
           phone_number?: string | null
-          kyc_verified?: boolean
-          kyc_verified_at?: string | null
-          kyc_provider_user_id?: string | null
-          kyc_country?: string | null
-          account_status?: string
-          created_at?: string
-          updated_at?: string
-          date_of_birth_self_attested?: string | null
-          terms_accepted_at?: string | null
-          stripe_customer_id?: string | null
+          phone_verified?: boolean
           stripe_connect_account_id?: string | null
-          stripe_connect_payouts_enabled?: boolean
           stripe_connect_onboarded_at?: string | null
+          stripe_connect_payouts_enabled?: boolean
+          stripe_customer_id?: string | null
+          terms_accepted_at?: string | null
+          updated_at?: string
+          username: string
         }
         Update: {
-          id?: string
-          username?: string
-          email?: string
+          account_status?: string
           balance_cents?: number
+          created_at?: string
+          date_of_birth_self_attested?: string | null
           elo_rating?: number
+          email?: string
+          id?: string
+          is_admin?: boolean
+          kyc_country?: string | null
+          kyc_provider_user_id?: string | null
+          kyc_verified?: boolean
+          kyc_verified_at?: string | null
           lifetime_deposits_cents?: number
           lifetime_winnings_cents?: number
           matches_played?: number
           matches_won?: number
-          phone_verified?: boolean
           phone_number?: string | null
-          kyc_verified?: boolean
-          kyc_verified_at?: string | null
-          kyc_provider_user_id?: string | null
-          kyc_country?: string | null
-          account_status?: string
-          created_at?: string
-          updated_at?: string
-          date_of_birth_self_attested?: string | null
-          terms_accepted_at?: string | null
-          stripe_customer_id?: string | null
+          phone_verified?: boolean
           stripe_connect_account_id?: string | null
-          stripe_connect_payouts_enabled?: boolean
           stripe_connect_onboarded_at?: string | null
+          stripe_connect_payouts_enabled?: boolean
+          stripe_customer_id?: string | null
+          terms_accepted_at?: string | null
+          updated_at?: string
+          username?: string
         }
         Relationships: []
       }
       withdrawal_addresses: {
         Row: {
-          id: string
-          user_id: string
+          added_at: string
           address: string
           address_type: string
+          id: string
           is_primary: boolean
           kyc_verified: boolean
-          added_at: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
+          added_at?: string
           address: string
           address_type: string
+          id?: string
           is_primary?: boolean
           kyc_verified?: boolean
-          added_at?: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
+          added_at?: string
           address?: string
           address_type?: string
+          id?: string
           is_primary?: boolean
           kyc_verified?: boolean
-          added_at?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "withdrawal_addresses_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "withdrawal_addresses_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "withdrawal_addresses_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       leaderboard: {
         Row: {
-          id: string | null
-          username: string | null
           elo_rating: number | null
+          equipped_title_tier: string | null
+          id: string | null
+          is_provisional: boolean | null
           matches_played: number | null
           matches_won: number | null
+          rank: number | null
           skill_index: number | null
           trust_band: string | null
-          is_provisional: boolean | null
-          equipped_title_tier: string | null
-          rank: number | null
+          username: string | null
         }
         Relationships: []
       }
       milestone_progress: {
         Row: {
-          realised_profit_cents: number | null
-          threshold_cents: number | null
+          milestones_created: number | null
           milestones_earned: number | null
           progress_cents: number | null
-          milestones_created: number | null
+          realised_profit_cents: number | null
+          threshold_cents: number | null
         }
         Relationships: []
       }
       public_players: {
         Row: {
-          id: string | null
-          username: string | null
+          created_at: string | null
           elo_rating: number | null
+          equipped_title_tier: string | null
+          id: string | null
           matches_played: number | null
           matches_won: number | null
-          created_at: string | null
-          equipped_title_tier: string | null
+          username: string | null
         }
         Relationships: []
       }
     }
     Functions: {
-      accounts_are_linked: {
-        Args: {
-          a: string
-          b: string
-        }
-        Returns: boolean
-      }
+      accounts_are_linked: { Args: { a: string; b: string }; Returns: boolean }
+      assert_bounty_claim_works: { Args: never; Returns: string }
       assert_can_wager: {
-        Args: {
-          p_user_id: string
-          p_stake_cents: number
-        }
+        Args: { p_stake_cents: number; p_user_id: string }
         Returns: undefined
       }
-      assert_function_dependencies: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
-      assert_ledger_vocabulary: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
-      assert_settlement_works: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
-      assert_tournament_completion_works: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
-      assert_tournament_entry_works: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
+      assert_function_dependencies: { Args: never; Returns: string }
+      assert_ledger_vocabulary: { Args: never; Returns: string }
+      assert_loyalty_points_mint_works: { Args: never; Returns: string }
+      assert_loyalty_redemption_works: { Args: never; Returns: string }
+      assert_satellite_completion_works: { Args: never; Returns: string }
+      assert_settlement_works: { Args: never; Returns: string }
+      assert_tournament_completion_works: { Args: never; Returns: string }
+      assert_tournament_entry_works: { Args: never; Returns: string }
       audit_balance_drift: {
-        Args: Record<PropertyKey, never>
-        Returns: unknown[]
+        Args: never
+        Returns: {
+          cached_cents: number
+          drift_cents: number
+          ledger_cents: number
+          user_id: string
+        }[]
       }
       check_contest_eligibility: {
+        Args: { p_tournament_id: string; p_user_id: string }
+        Returns: {
+          allowed: boolean
+          reason: string
+        }[]
+      }
+      check_deposit_allowed: {
+        Args: { p_amount_cents: number; p_user_id: string }
+        Returns: {
+          allowed: boolean
+          reason: string
+        }[]
+      }
+      check_rate_limit: {
         Args: {
-          p_user_id: string
-          p_tournament_id: string
+          p_bucket: string
+          p_max_requests: number
+          p_rate_key: string
+          p_window_ms: number
         }
-        Returns: unknown[]
+        Returns: {
+          allowed: boolean
+          remaining: number
+          retry_after_ms: number
+        }[]
+      }
+      cleanup_rate_limit_counters: { Args: never; Returns: number }
+      complete_satellite_tournament: {
+        Args: { p_bubble?: Json; p_seat_winners: Json; p_tournament_id: string }
+        Returns: undefined
       }
       complete_tournament: {
-        Args: {
-          p_tournament_id: string
-          p_placings: Json
-        }
+        Args: { p_placings: Json; p_tournament_id: string }
         Returns: undefined
       }
       create_tournament_round: {
         Args: {
-          p_tournament_id: string
-          p_round_number: number
           p_pairings: Json
+          p_round_number: number
+          p_tournament_id: string
         }
         Returns: string
       }
       enter_tournament: {
         Args: {
-          p_user_id: string
+          p_redeem_points?: number
           p_tournament_id: string
+          p_user_id: string
         }
         Returns: string
       }
-      is_admin: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
+      file_match_dispute: {
+        Args: { p_match_id: string; p_reason: string }
+        Returns: string
       }
+      hash_phone: { Args: { p_phone: string }; Returns: string }
+      is_admin: { Args: never; Returns: boolean }
       is_identifier_excluded: {
-        Args: {
-          p_identifier_type: string
-          p_identifier_hash: string
-        }
+        Args: { p_identifier_hash: string; p_identifier_type: string }
         Returns: boolean
       }
-      is_self_excluded: {
-        Args: {
-          target_user_id: string
+      is_self_excluded: { Args: { target_user_id: string }; Returns: boolean }
+      list_open_disputes: {
+        Args: never
+        Returns: {
+          adjustment_cents: number | null
+          created_at: string
+          filed_by_user_id: string
+          id: string
+          match_id: string
+          reason: string
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by_user_id: string | null
+          status: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "match_disputes"
+          isOneToOne: false
+          isSetofReturn: true
         }
-        Returns: boolean
       }
       move_balance: {
         Args: {
-          p_user_id: string
           p_amount_cents: number
-          p_reason: string
           p_idempotency_key: string
           p_match_id?: string
+          p_reason: string
           p_tournament_id?: string
           p_transaction_id?: string
+          p_user_id: string
         }
         Returns: number
       }
-      realised_profit_cents: {
-        Args: Record<PropertyKey, never>
-        Returns: number
-      }
-      reconcile_orphan_reservations: {
+      move_loyalty_points: {
         Args: {
-          p_older_than?: unknown
+          p_amount_cents: number
+          p_idempotency_key: string
+          p_match_id?: string
+          p_reason: string
+          p_tournament_id?: string
+          p_user_id: string
         }
+        Returns: number
+      }
+      realised_profit_cents: { Args: never; Returns: number }
+      reconcile_orphan_reservations: {
+        Args: { p_older_than?: string }
         Returns: number
       }
       record_tournament_match_result: {
         Args: {
+          p_match_id?: string
           p_tournament_match_id: string
           p_winner_id: string
-          p_match_id?: string
         }
         Returns: undefined
       }
       record_withdrawal_outcome: {
         Args: {
+          p_failure_reason?: string
           p_payout_id: string
-          p_stripe_transfer_id: string | null
           p_status: string
-          p_failure_reason?: string | null
+          p_stripe_transfer_id: string
         }
         Returns: undefined
       }
-      refund_stake: {
-        Args: {
-          p_reservation_id: string
-        }
-        Returns: boolean
-      }
+      refund_stake: { Args: { p_reservation_id: string }; Returns: boolean }
       request_withdrawal: {
-        Args: {
-          p_user_id: string
-          p_amount_cents: number
-        }
+        Args: { p_amount_cents: number; p_user_id: string }
         Returns: string
       }
       reserve_stake: {
-        Args: {
-          p_user_id: string
-          p_amount_cents: number
-        }
+        Args: { p_amount_cents: number; p_user_id: string }
         Returns: string
+      }
+      resolve_match_dispute: {
+        Args: {
+          p_adjustment_cents?: number
+          p_adjustment_user_id?: string
+          p_dispute_id: string
+          p_resolution_note: string
+          p_status: string
+        }
+        Returns: undefined
       }
       settle_ranked_match: {
         Args: {
+          p_duration_seconds: number
+          p_elo_delta_loser: number
+          p_elo_delta_winner: number
+          p_fee_cents: number
+          p_is_draw: boolean
+          p_loser_id: string
           p_match_id: string
+          p_move_sequence: string[]
+          p_reason: string
+          p_replay: Json
           p_reservation_1: string
           p_reservation_2: string
-          p_winner_id: string | null
-          p_loser_id: string | null
-          p_is_draw: boolean
           p_stake_cents: number
-          p_fee_cents: number
-          p_winner_payout_cents: number
-          p_elo_delta_winner: number
-          p_elo_delta_loser: number
-          p_reason: string
-          p_duration_seconds: number
-          p_replay: Json
-          p_move_sequence: string[]
           p_timings_1: number[]
           p_timings_2: number[]
+          p_winner_id: string
+          p_winner_payout_cents: number
         }
         Returns: boolean
       }
@@ -1950,9 +3364,125 @@ export interface Database {
   }
 }
 
-export type Tables<T extends keyof Database["public"]["Tables"]> =
-  Database["public"]["Tables"][T]["Row"]
-export type TablesInsert<T extends keyof Database["public"]["Tables"]> =
-  Database["public"]["Tables"][T]["Insert"]
-export type TablesUpdate<T extends keyof Database["public"]["Tables"]> =
-  Database["public"]["Tables"][T]["Update"]
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const

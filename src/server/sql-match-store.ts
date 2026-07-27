@@ -34,7 +34,7 @@ import {
   type StandingRow,
   type RoundResult,
 } from "@/lib/game/bracket"
-import { distributePrizePool, type FormatId } from "@/lib/game/formats"
+import { distributePrizePool, planSatellite, type FormatId } from "@/lib/game/formats"
 import type { MatchStore, SettlementInput, TournamentMatchup, TournamentSettlementInput } from "@/server/match-server"
 import type { PlayerSlot } from "@/lib/game/engine"
 
@@ -121,8 +121,14 @@ export class SqlMatchStore implements MatchStore {
       p_match_id: input.matchId,
       p_reservation_1: input.reservationIds[1],
       p_reservation_2: input.reservationIds[2],
-      p_winner_id: winnerId,
-      p_loser_id: loserId,
+      // settle_ranked_match's p_winner_id/p_loser_id genuinely accept SQL
+      // NULL for a draw (coalesced against the reservation's own player id
+      // inside the function) — Supabase's generated Args type doesn't widen
+      // to `| null` for a non-defaulted parameter, so this is a real,
+      // intentional null being cast past an overly strict generated type,
+      // not a bug being silenced.
+      p_winner_id: winnerId as string,
+      p_loser_id: loserId as string,
       p_is_draw: isDraw,
       p_stake_cents: stakeCents,
       p_fee_cents: isDraw ? 0 : fee.feeCents,
@@ -246,17 +252,41 @@ export class SqlMatchStore implements MatchStore {
   }
 
   /**
-   * Formats this advances automatically. Bounty, ladder, and arena have
-   * their own progression models (bounty claims, ladder runs) that don't map
-   * onto tournament_matches/tournament_rounds the same way single-elim and
-   * swiss do — left on the existing manual admin flow rather than guessed at
-   * here. Nothing about ranked or the formats above changes for them.
+   * Formats this advances automatically.
+   *
+   * Bounty is a knockout bracket with a side payment on elimination — same
+   * tournament_rounds/tournament_matches shape as single_elimination, so it
+   * advances automatically too (bracket.ts's advanceRound/planRound treat it
+   * identically to single_elimination; the bounty claim itself is paid by
+   * record_tournament_match_result, independent of round advancement).
+   *
+   * Ladder and arena are NOT auto-advanced, and this is a deliberate,
+   * final decision, not a placeholder:
+   *   - Ladder is a solo climb (FORMATS.ladder.minField === maxField === 1)
+   *     against escalating opposition with a bank-or-continue decision per
+   *     rung (see planLadder/ladderEdge in formats.ts, and the ladder_runs/
+   *     ladder_rung_results tables). There is no bracket, no opponent, and no
+   *     tournament_matches row to advance — "auto-advance" doesn't apply to
+   *     this format at all, not even in principle. Building the actual
+   *     ladder game loop (start-run, play-rung, bank/continue endpoints) is a
+   *     new game mode, not a round-advancement gap, and is out of scope here.
+   *   - Arena is continuous winner-stays-on seating with no discrete rounds
+   *     (FORMATS.arena.blurb: "Winner stays on"). tournament_rounds models
+   *     discrete numbered rounds; arena has none. Same conclusion: building
+   *     arena's actual seating/rotation logic is a new game mode, not a
+   *     wiring gap in the existing round-advancement code.
+   * Both formats exist today only as schema (format_id enum value, rake
+   * definition) with no gameplay loop implemented anywhere in src/ — that is
+   * a materially bigger build than "wire up auto-advance" and is called out
+   * as such in this handoff's final report rather than silently left half
+   * done.
    */
   private static readonly AUTO_ADVANCE_FORMATS: ReadonlySet<string> = new Set([
     "single_elimination",
     "satellite",
     "swiss",
     "survivor",
+    "bounty",
   ])
 
   private async maybeAdvanceRound(tournamentMatchId: string): Promise<void> {
@@ -270,7 +300,7 @@ export class SqlMatchStore implements MatchStore {
     const { data: tournament } = await this.db
       .from("tournaments")
       .select(
-        "id, format_id, ruleset_id, entry_fee_cents, field_size, gross_cents, rake_cents, prize_pool_cents, status"
+        "id, format_id, ruleset_id, entry_fee_cents, field_size, gross_cents, rake_cents, prize_pool_cents, status, satellite_target_tournament_id, satellite_seat_value_cents"
       )
       .eq("id", match.tournament_id)
       .maybeSingle()
@@ -318,6 +348,8 @@ export class SqlMatchStore implements MatchStore {
       gross_cents: number
       rake_cents: number
       prize_pool_cents: number
+      satellite_target_tournament_id: string | null
+      satellite_seat_value_cents: number | null
     },
     justCompletedRoundId: string
   ): Promise<void> {
@@ -434,15 +466,51 @@ export class SqlMatchStore implements MatchStore {
   private async payoutTournament(
     tournament: {
       id: string
+      format_id: string
       entry_fee_cents: number
       field_size: number
       gross_cents: number
       rake_cents: number
       prize_pool_cents: number
+      satellite_target_tournament_id: string | null
+      satellite_seat_value_cents: number | null
     },
     standings: StandingRow[]
   ): Promise<void> {
     const order = finalPlacings(standings)
+
+    // Satellites pay seats at face value, not a descending place curve —
+    // distributePrizePool's PAYOUT_CURVES are for cash-prize formats only.
+    // See 20260726000026_satellite_completion.sql.
+    if (tournament.format_id === "satellite") {
+      if (!tournament.satellite_target_tournament_id || !tournament.satellite_seat_value_cents) {
+        throw new Error(`Satellite ${tournament.id} is missing its target tournament or seat value`)
+      }
+
+      const satellite = planSatellite(tournament.prize_pool_cents, tournament.satellite_seat_value_cents)
+
+      const seatWinners = order
+        .slice(0, satellite.seatsAwarded)
+        .map((userId, i) => ({ user_id: userId, place: i + 1 }))
+
+      const bubbleUserId = order[satellite.seatsAwarded]
+      const bubble =
+        satellite.bubbleCashCents > 0 && bubbleUserId
+          ? { user_id: bubbleUserId, place: satellite.seatsAwarded + 1, amount_cents: satellite.bubbleCashCents }
+          : null
+
+      const { error: satelliteError } = await this.db.rpc("complete_satellite_tournament", {
+        p_tournament_id: tournament.id,
+        p_seat_winners: seatWinners,
+        p_bubble: bubble,
+      })
+
+      if (satelliteError) {
+        console.error("[payoutTournament] satellite FAILED", { tournamentId: tournament.id, message: satelliteError.message })
+        throw new Error(`Failed to complete satellite ${tournament.id}: ${satelliteError.message}`)
+      }
+      return
+    }
 
     const pool: PrizePool = {
       // Not read by distributePrizePool (it only uses fieldSize and

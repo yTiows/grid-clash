@@ -120,9 +120,9 @@ export function capBindsAtPotCents(tier: FeeTier = "standard"): number {
  * break-even is p = E / W.
  *
  * Printed next to the stake selector, per tier. It is the single most
- * decision-relevant number on the page: at 2% it is 51.0%, which a strong
- * player clears. The whole product premise depends on this staying true, so it
- * is displayed rather than derivable.
+ * decision-relevant number on the page: at the standard 1% rate it is
+ * 50.51%, which a strong player clears. The whole product premise depends on
+ * this staying true, so it is displayed rather than derivable.
  */
 export function breakEvenWinRate(entryFeeCents: number, tier: FeeTier = "standard"): number {
   return entryFeeCents / calculateMatchFee(entryFeeCents, tier).winnerPayoutCents
@@ -146,6 +146,16 @@ export function expectedValueCents(
  * queue. `bracketsOpenAfterWait` widens the search the longer someone waits, so
  * a quiet Tuesday does not mean no games. Without that, this design is a
  * fairness win and a retention loss.
+ *
+ * STATUS — not wired into matchmaking. Nothing in src/ calls BRACKETS,
+ * bracketsUnlockedFor, or bracketsOpenAfterWait outside this file: the queue
+ * (stake-picker.tsx, match-server.ts) gates only on RANKED_STAKE_TIERS_CENTS
+ * and newAccountStakeCeilingCents below. elite.maxStakeCents ($10,000) is
+ * therefore NOT the platform's real ranked stake ceiling — a prior review
+ * (CLAUDE_CODE_BRIEF.md §5.1) mistook this dead scaffold for the live limit.
+ * The real ceiling is RANKED_STAKE_TIERS_CENTS' top entry, and that is what
+ * was actually lowered. Leave this comment until BRACKETS is either wired up
+ * or removed, so the same mistake isn't made twice.
  */
 export type BracketId = "bronze" | "silver" | "gold" | "elite"
 
@@ -307,10 +317,11 @@ export function formatPercent(fraction: number, digits = 2): string {
  * Tournament fee is charged on the gross field, not per match, and is stated
  * on the contest card before entry.
  *
- * NOTE — the 1v1 fee is 2%. Tournament fees are higher because an entry buys
- * a structure rather than a single match: bracket running, seat guarantees,
- * concentrated prizes and a title. That gap is defensible but it is large, and
- * sophisticated players will compare the two directly. See TOURNAMENT_FEE_BPS.
+ * NOTE — the 1v1 standard fee is 1% (FEE_TIERS.standard). Tournament fees are
+ * higher because an entry buys a structure rather than a single match:
+ * bracket running, seat guarantees, concentrated prizes and a title. That gap
+ * is defensible but it is large, and sophisticated players will compare the
+ * two directly. See TOURNAMENT_FEE_BPS.
  */
 export type ContestKind =
   | "ranked"
@@ -380,20 +391,30 @@ export function tournamentExpectedValueCents(pool: PrizePool): number {
   return pool.prizePoolCents / pool.fieldSize - pool.entryFeeCents
 }
 
-export const MILESTONE_THRESHOLD_CENTS = 100_000
-export const MILESTONE_ENTRY_FEE_CENTS = 10_000
-export const MILESTONE_FIELD_SIZE = 15
+// Milestone sizing constants and progressToNextMilestone() live in
+// scheduling.ts (MILESTONE_PROFIT_THRESHOLD_CENTS = $20,000, with the full
+// fixed_subsidy/guaranteed_pool exposure model built on that number — see
+// planMilestoneEvent()). This file used to export a second, conflicting set
+// of milestone constants ($1,000 threshold) and its own progressToNextMilestone
+// — a stub nothing in src/ ever imported, left behind by whatever rewrite
+// produced scheduling.ts's real version. milestone_progress (the SQL view)
+// had drifted onto the same wrong $1,000 number as this dead stub; both are
+// fixed to scheduling.ts's $20,000 as of 20260726000028_milestone_threshold_fix.sql.
+// Removed here rather than left alongside the real one, so there is exactly
+// one milestone threshold in the codebase, not two that can drift again.
 export const DOLLAR_ENTRY_FEE_CENTS = 100
 export const DOLLAR_FIELD_SIZE = 15
 
-export function progressToNextMilestone(realisedProfitCents: number) {
-  const currentCents = realisedProfitCents % MILESTONE_THRESHOLD_CENTS
-  return {
-    currentCents,
-    targetCents: MILESTONE_THRESHOLD_CENTS,
-    fraction: currentCents / MILESTONE_THRESHOLD_CENTS,
-  }
-}
+// --- Loyalty points -----------------------------------------------------
+
+/**
+ * One-time bonus for a player's first tournament entry in a rolling week —
+ * CLAUDE_CODE_BRIEF.md §5.6. Lives here rather than in src/actions/
+ * tournaments.ts: a "use server" file can only export async functions (and
+ * types) — a plain const export from one fails Next.js's server-actions
+ * build transform, a class of bug tsc/eslint don't catch.
+ */
+export const FIRST_TOURNAMENT_OF_WEEK_BONUS_CENTS = 100
 
 // --- Rating -----------------------------------------------------------------
 
@@ -406,8 +427,26 @@ export const ELO_MAX = 3200
  * BRACKETS above: brackets gate which *range* of stakes an account may enter
  * based on skill/verification, while this is the fixed, concrete set of
  * amounts offered within whatever range is unlocked.
+ *
+ * CLAUDE_CODE_BRIEF.md §5.1 — funnel strategy: ranked's ceiling must sit
+ * structurally below where a tournament entry starts feeling like "the real
+ * stakes," so a player who outgrows ranked has nowhere to go but a
+ * tournament. Standard-tournament title tiers (complete_tournament(),
+ * 20260725000019_tournament_completion.sql) start bronze under $25 and gold
+ * at $100 — the $10,000 top tier a prior review worried about (see the note
+ * on BRACKETS above) turned out to be unreachable dead code; the real ceiling
+ * here previously topped out at $100, sitting exactly ON the gold threshold
+ * rather than below it.
+ *
+ * This is a pricing decision, not a pure bug fix, made conservatively per
+ * this handoff's instructions: the $100 tier is removed rather than kept and
+ * second-guessed later. Ranked stays a real, low-friction front door at $5
+ * and $20 — both well under even the cheapest standard tournament tier — and
+ * a player who wants to put more than $20 into a single contest now has no
+ * ranked option and must go to a tournament to do it. Revisit only alongside
+ * an actual pricing review, not as a follow-up code change.
  */
-export const RANKED_STAKE_TIERS_CENTS = [500, 2000, 10000] as const
+export const RANKED_STAKE_TIERS_CENTS = [500, 2000] as const
 export type RankedStakeCents = (typeof RANKED_STAKE_TIERS_CENTS)[number]
 
 /**

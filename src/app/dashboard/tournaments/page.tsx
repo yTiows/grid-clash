@@ -1,8 +1,10 @@
 import { EnterTournamentButton } from "@/components/game/enter-tournament-button"
+import { Countdown } from "@/components/game/countdown"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { createClient } from "@/lib/supabase/server"
 import { RULESETS } from "@/lib/game/rulesets"
+import { formatCents } from "@/lib/game/fees"
 
 export default async function TournamentsPage() {
   const supabase = createClient()
@@ -21,6 +23,13 @@ export default async function TournamentsPage() {
     .from("tournament_entries")
     .select("tournament_id")
     .eq("user_id", user.id)
+
+  const { data: loyalty } = await supabase
+    .from("loyalty_points")
+    .select("balance_cents")
+    .eq("user_id", user.id)
+    .maybeSingle()
+  const loyaltyPointsCents = loyalty?.balance_cents ?? 0
 
   const enteredIds = new Set((myEntries ?? []).map((e) => e.tournament_id))
 
@@ -44,9 +53,36 @@ export default async function TournamentsPage() {
     readyTournamentNames = new Map((names ?? []).map((t) => [t.id, t.name]))
   }
 
+  // Satellite target names/pools — CLAUDE_CODE_BRIEF.md §5.3: "a satellite's
+  // card should say what it's a satellite into, by name, with the target
+  // tournament's prize pool front and center." One extra query, same joined-
+  // in-JS convention as everything else on this page.
+  const satelliteTargetIds = [
+    ...new Set(
+      (tournaments ?? [])
+        .filter((t) => t.format_id === "satellite" && t.satellite_target_tournament_id)
+        .map((t) => t.satellite_target_tournament_id as string)
+    ),
+  ]
+  let satelliteTargets = new Map<string, { name: string; prizePoolCents: number }>()
+  if (satelliteTargetIds.length > 0) {
+    const { data: targets } = await supabase
+      .from("tournaments")
+      .select("id, name, prize_pool_cents")
+      .in("id", satelliteTargetIds)
+    satelliteTargets = new Map((targets ?? []).map((t) => [t.id, { name: t.name, prizePoolCents: t.prize_pool_cents }]))
+  }
+
   return (
     <div className="space-y-6">
-      <h1 className="display text-2xl">Tournaments</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="display text-2xl">Tournaments</h1>
+        {loyaltyPointsCents > 0 && (
+          <p className="text-sm text-muted-foreground">
+            <span className="font-bold text-gold">{formatCents(loyaltyPointsCents)}</span> in points
+          </p>
+        )}
+      </div>
 
       {readyMatches && readyMatches.length > 0 && (
         <div className="space-y-3">
@@ -81,19 +117,42 @@ export default async function TournamentsPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           {tournaments.map((t) => {
             const seatsTaken = t.tournament_entries?.length ?? 0
+            const seatsLeft = t.field_size - seatsTaken
             const alreadyEntered = enteredIds.has(t.id)
             const ruleset = RULESETS[t.ruleset_id as keyof typeof RULESETS]
+            const isSatellite = t.format_id === "satellite"
+            const target = t.satellite_target_tournament_id
+              ? satelliteTargets.get(t.satellite_target_tournament_id)
+              : undefined
+
+            // Urgency per CLAUDE_CODE_BRIEF.md §5.7 — low seats or an
+            // upcoming start are real, checkable facts, not manufactured
+            // pressure, so this only lights up when actually true.
+            const lowSeats = seatsLeft > 0 && seatsLeft <= Math.max(2, Math.ceil(t.field_size * 0.15))
 
             return (
-              <Card key={t.id} className="sticker-lift">
+              <Card key={t.id} className={`sticker-lift ${isSatellite ? "border-2 border-gold" : ""}`}>
+                {isSatellite && target && (
+                  <div className="border-b-2 border-gold bg-gold/10 px-4 py-2 text-xs font-bold uppercase tracking-wide text-gold">
+                    Satellite → seat in {target.name} (${(target.prizePoolCents / 100).toFixed(2)} pool)
+                  </div>
+                )}
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-lg">{t.name}</CardTitle>
-                    <Badge variant={t.status === "full" ? "muted" : "default"}>
+                    <Badge variant={t.status === "full" ? "muted" : lowSeats ? "gold" : "default"}>
                       {seatsTaken}/{t.field_size}
                     </Badge>
                   </div>
                   {ruleset && <p className="text-xs text-muted-foreground">{ruleset.blurb}</p>}
+                  <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+                    {lowSeats && t.status !== "full" && (
+                      <span className="font-bold text-gold">{seatsLeft} seat{seatsLeft === 1 ? "" : "s"} left</span>
+                    )}
+                    {t.starts_at && new Date(t.starts_at).getTime() > Date.now() && (
+                      <Countdown target={t.starts_at} />
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {/* Every money term stated explicitly, per brand rule: money is
@@ -104,9 +163,15 @@ export default async function TournamentsPage() {
                       <div className="tabular font-bold">${(t.entry_fee_cents / 100).toFixed(2)}</div>
                     </div>
                     <div>
-                      <div className="text-xs text-muted-foreground">Prize pool</div>
+                      <div className="text-xs text-muted-foreground">
+                        {isSatellite ? "Seat value" : "Prize pool"}
+                      </div>
                       <div className="tabular font-bold text-gold">
-                        ${(t.prize_pool_cents / 100).toFixed(2)}
+                        $
+                        {(
+                          (isSatellite ? t.satellite_seat_value_cents ?? t.prize_pool_cents : t.prize_pool_cents) /
+                          100
+                        ).toFixed(2)}
                       </div>
                     </div>
                     <div>
@@ -125,7 +190,11 @@ export default async function TournamentsPage() {
                     ) : seatsTaken >= t.field_size ? (
                       <Badge variant="muted">Full</Badge>
                     ) : (
-                      <EnterTournamentButton tournamentId={t.id} />
+                      <EnterTournamentButton
+                        tournamentId={t.id}
+                        entryFeeCents={t.entry_fee_cents}
+                        loyaltyPointsCents={loyaltyPointsCents}
+                      />
                     )}
                   </div>
                 </CardContent>

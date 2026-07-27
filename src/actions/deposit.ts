@@ -5,6 +5,7 @@ import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
 import { stripe } from "@/lib/stripe"
+import { checkRateLimit, formatRetryAfter } from "@/lib/middleware/rate-limit"
 
 const MIN_DEPOSIT_CENTS = 500
 const MAX_DEPOSIT_CENTS = 500_000
@@ -51,6 +52,14 @@ export async function createDepositAction(
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return { status: "error", message: "Sign in and try again." }
+
+  const rateLimit = await checkRateLimit("deposit", user.id)
+  if (!rateLimit.allowed) {
+    return {
+      status: "error",
+      message: `Too many deposit attempts. Try again in ${formatRetryAfter(rateLimit.retryAfterMs)}.`,
+    }
+  }
 
   const { data: profile } = await supabase
     .from("users")

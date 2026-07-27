@@ -1,9 +1,20 @@
 import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
-import { breakEvenWinRate, formatPercent } from "@/lib/game/fees"
+import { breakEvenWinRate, formatPercent, FEE_TIERS } from "@/lib/game/fees"
 
 const BREAK_EVEN = breakEvenWinRate(2000, "standard")
+/**
+ * FOUND BY: rendering this page in a browser and reading it — the headline
+ * break-even figure above is computed from FEE_TIERS.standard (1%, fixed
+ * per fees.ts's own comment: "It was drifting out of sync with the code,
+ * which still charged 200bps... Fixed here, not in the copy"), but this
+ * paragraph hardcoded the literal string "2%" — the exact rate that fix was
+ * about, left behind in the one place a prospective player reads it before
+ * ever seeing the dashboard. Derived now so the two numbers on this page
+ * cannot disagree with each other again.
+ */
+const STANDARD_FEE_PERCENT = (FEE_TIERS.standard.bps / 100).toFixed(0)
 
 const RULESETS = [
   { name: "Classic", blurb: "5×5, connect 4. One shield, one bomb, one swap." },
@@ -37,8 +48,8 @@ export default function LandingPage() {
         </h1>
 
         <p className="max-w-xl text-balance text-lg text-muted-foreground">
-          A 5×5 tactical game with hidden pieces and a 5-second clock. 2% fee on ranked matches —
-          the lowest in the category, printed on every stake before you play.
+          A 5×5 tactical game with hidden pieces and a 5-second clock. {STANDARD_FEE_PERCENT}% fee
+          on ranked matches — the lowest in the category, printed on every stake before you play.
         </p>
 
         <div className="flex flex-col gap-3 sm:flex-row">
@@ -49,6 +60,10 @@ export default function LandingPage() {
             <Link href="/login">I already play</Link>
           </Button>
         </div>
+
+        <Link href="/tutorial" className="text-sm font-bold text-primary hover:underline">
+          New here? Try the tutorial →
+        </Link>
 
         <div className="mt-8 grid w-full max-w-3xl grid-cols-2 gap-3 sm:grid-cols-4">
           {RULESETS.map((r) => (

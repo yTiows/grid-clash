@@ -5,6 +5,7 @@ import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
 import { stripe } from "@/lib/stripe"
+import { checkRateLimit, formatRetryAfter } from "@/lib/middleware/rate-limit"
 
 export type WithdrawalActionState = {
   status: "idle" | "error"
@@ -82,6 +83,14 @@ export async function requestWithdrawalAction(
   } = await supabase.auth.getUser()
   if (!user) return { status: "error", message: "Sign in and try again." }
 
+  const rateLimit = await checkRateLimit("withdrawal", user.id)
+  if (!rateLimit.allowed) {
+    return {
+      status: "error",
+      message: `Too many withdrawal attempts. Try again in ${formatRetryAfter(rateLimit.retryAfterMs)}.`,
+    }
+  }
+
   const { data: payoutId, error: reserveError } = await supabase.rpc("request_withdrawal", {
     p_user_id: user.id,
     p_amount_cents: amountCents,
@@ -106,7 +115,11 @@ export async function requestWithdrawalAction(
     // reverse the hold rather than leave money debited with nowhere to go.
     await supabase.rpc("record_withdrawal_outcome", {
       p_payout_id: payoutId,
-      p_stripe_transfer_id: null,
+      // p_stripe_transfer_id has no SQL default, so its generated type is
+      // `string`, not `string | null` — but the function coalesces it
+      // against the existing value, so a real null here (no transfer was
+      // ever created) is intentional, not a type escape hatch.
+      p_stripe_transfer_id: null as unknown as string,
       p_status: "failed",
       p_failure_reason: "No connected account on file",
     })
@@ -125,7 +138,8 @@ export async function requestWithdrawalAction(
       p_payout_id: payoutId,
       p_stripe_transfer_id: transfer.id,
       p_status: "in_transit",
-      p_failure_reason: null,
+      // p_failure_reason has `default null` in SQL, so it's optional in the
+      // generated type — omitted rather than passed as null to match that.
     })
   } catch (err) {
     // The transfer call itself failed (network, Stripe-side rejection): undo
@@ -133,7 +147,7 @@ export async function requestWithdrawalAction(
     // arrive for a transfer that was never created.
     await supabase.rpc("record_withdrawal_outcome", {
       p_payout_id: payoutId,
-      p_stripe_transfer_id: null,
+      p_stripe_transfer_id: null as unknown as string,
       p_status: "failed",
       p_failure_reason: err instanceof Error ? err.message : "Transfer failed",
     })

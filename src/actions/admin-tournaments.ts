@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { FORMATS, planTournament, distributePrizePool, type FormatId } from "@/lib/game/formats"
+import { FORMATS, planTournament, distributePrizePool, planSatellite, type FormatId } from "@/lib/game/formats"
 import { calculatePrizePool } from "@/lib/game/fees"
 
 export type AdminActionState = {
@@ -47,6 +47,11 @@ export async function createTournamentAction(
   const entryFeeCents = Math.round(Number(formData.get("entryFeeCents")) || 0)
   const fieldSize = Math.round(Number(formData.get("fieldSize")) || 0)
   const name = String(formData.get("name") ?? "").trim()
+  const satelliteTargetTournamentId = String(formData.get("satelliteTargetTournamentId") ?? "").trim()
+  const startsAtRaw = String(formData.get("startsAt") ?? "").trim()
+  // datetime-local has no timezone; treated as the operator's local time and
+  // converted to a real instant here rather than stored as a bare string.
+  const startsAt = startsAtRaw ? new Date(startsAtRaw).toISOString() : null
 
   if (!VALID_FORMATS.includes(formatId)) {
     return { status: "error", message: "Choose a valid format." }
@@ -67,6 +72,43 @@ export async function createTournamentAction(
 
   const admin = createAdminClient()
 
+  // A satellite's whole mechanic is "prize = a seat in a specific bigger
+  // contest" — tournaments_satellite_shape (migration 7) enforces that a
+  // satellite always has a target, so this must be resolved before insert
+  // or the DB constraint refuses the row.
+  let satelliteTargetEntryFeeCents: number | null = null
+  if (formatId === "satellite") {
+    if (!satelliteTargetTournamentId) {
+      return { status: "error", message: "A satellite needs a target tournament." }
+    }
+    const { data: target } = await admin
+      .from("tournaments")
+      .select("id, entry_fee_cents, status")
+      .eq("id", satelliteTargetTournamentId)
+      .maybeSingle()
+    if (!target) {
+      return { status: "error", message: "Target tournament not found." }
+    }
+    if (target.status === "completed" || target.status === "cancelled") {
+      return { status: "error", message: "Target tournament has already finished — pick one that's still upcoming." }
+    }
+    if (target.entry_fee_cents <= entryFeeCents) {
+      return {
+        status: "error",
+        message: "The target tournament's entry fee must be higher than this satellite's — otherwise it isn't a satellite.",
+      }
+    }
+    satelliteTargetEntryFeeCents = target.entry_fee_cents
+
+    const satellite = planSatellite(plan.pool.prizePoolCents, satelliteTargetEntryFeeCents)
+    if (satellite.seatsAwarded < 1) {
+      return {
+        status: "error",
+        message: `At this field size and entry fee, the pool ($${(plan.pool.prizePoolCents / 100).toFixed(2)}) can't fund even one $${(satelliteTargetEntryFeeCents / 100).toFixed(2)} seat. Raise the field, the entry fee, or pick a cheaper target.`,
+      }
+    }
+  }
+
   const { error: insertError } = await admin.from("tournaments").insert({
     kind: "tournament_standard",
     name,
@@ -84,6 +126,13 @@ export async function createTournamentAction(
     bounty_per_head_cents: plan.bountyPerHeadCents,
     place_pool_cents: plan.placePoolCents,
     status: "open",
+    starts_at: startsAt,
+    ...(formatId === "satellite"
+      ? {
+          satellite_target_tournament_id: satelliteTargetTournamentId,
+          satellite_seat_value_cents: satelliteTargetEntryFeeCents,
+        }
+      : {}),
   })
 
   if (insertError) {
@@ -178,11 +227,51 @@ export async function completeTournamentAction(
 
   const { data: tournament } = await admin
     .from("tournaments")
-    .select("entry_fee_cents, field_size, rake_bps, kind")
+    .select("entry_fee_cents, field_size, rake_bps, kind, format_id, prize_pool_cents, satellite_seat_value_cents")
     .eq("id", tournamentId)
     .single()
 
   if (!tournament) return { status: "error", message: "Contest not found." }
+
+  // Satellites pay seats at face value, never a descending place curve — see
+  // complete_satellite_tournament (20260726000026_satellite_completion.sql).
+  // This is the manual/admin fallback path; the same rule the automatic
+  // advancement path (sql-match-store.ts payoutTournament) already follows.
+  if (tournament.format_id === "satellite") {
+    if (!tournament.satellite_seat_value_cents) {
+      return { status: "error", message: "This satellite has no seat value configured." }
+    }
+
+    const satellite = planSatellite(tournament.prize_pool_cents, tournament.satellite_seat_value_cents)
+
+    const seatWinners = orderedUserIds
+      .slice(0, satellite.seatsAwarded)
+      .map((userId, i) => ({ user_id: userId, place: i + 1 }))
+    const bubbleUserId = orderedUserIds[satellite.seatsAwarded]
+    const bubble =
+      satellite.bubbleCashCents > 0 && bubbleUserId
+        ? { user_id: bubbleUserId, place: satellite.seatsAwarded + 1, amount_cents: satellite.bubbleCashCents }
+        : null
+
+    const { error: satelliteError } = await admin.rpc("complete_satellite_tournament", {
+      p_tournament_id: tournamentId,
+      p_seat_winners: seatWinners,
+      p_bubble: bubble,
+    })
+
+    if (satelliteError) {
+      console.error("[completeTournamentAction] satellite failed", satelliteError)
+      return { status: "error", message: `Could not complete satellite: ${satelliteError.message}` }
+    }
+
+    revalidatePath("/admin/tournaments")
+    revalidatePath("/dashboard/tournaments")
+
+    return {
+      status: "success",
+      message: `Completed. ${satellite.seatsAwarded} seat(s) awarded${bubble ? `, plus $${(bubble.amount_cents / 100).toFixed(2)} bubble cash` : ""}.`,
+    }
+  }
 
   const pool = calculatePrizePool(
     "tournament_standard",

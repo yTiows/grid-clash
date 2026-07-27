@@ -48,7 +48,7 @@ Also note your **project ref** — the string in your project URL between `https
 
 ### 1.3 Push the schema — automated
 
-The repo has 15 migrations, already applied and verified against a real Postgres instance during development (46+ tables, full RLS coverage, every settlement path tested against live money-conservation checks). Pushing them is one command:
+The repo has 33 migrations, already applied and verified against a real, live Supabase project during development — every self-test function (`assert_settlement_works()`, `assert_tournament_entry_works()`, `assert_tournament_completion_works()`, `assert_satellite_completion_works()`, `assert_bounty_claim_works()`, `assert_loyalty_points_mint_works()`, `assert_loyalty_redemption_works()`, `assert_ledger_vocabulary()`, `assert_function_dependencies()`) was executed for real against seeded test accounts, not just applied and assumed correct. Pushing them is one command:
 
 ```bash
 npx supabase login              # opens a browser to authenticate the CLI
@@ -58,7 +58,7 @@ npx supabase db push            # applies every file in supabase/migrations/ in 
 
 `scripts/setup.sh` runs all three for you interactively — see section 4.
 
-**Manual fallback** (if the CLI ever gives you trouble): open **SQL Editor** in the Supabase dashboard and paste-run each file in `supabase/migrations/` in filename order (`20260724000001_...` first). Tedious with 15 files, but works.
+**Manual fallback** (if the CLI ever gives you trouble): open **SQL Editor** in the Supabase dashboard and paste-run each file in `supabase/migrations/` in filename order (`20260724000001_...` first). Tedious with 33 files, but works.
 
 ### 1.4 Regenerate types after pushing
 
@@ -77,6 +77,19 @@ Do this any time you add a migration of your own.
 - **Redirect URLs**: add `http://localhost:3000/auth/callback` for local dev, and `https://yourdomain.com/auth/callback` for production. This is the callback route at `src/app/auth/callback/route.ts` — don't rename that route without updating this.
 
 **Authentication → Email Templates:** Supabase's default email sending works for development but has low rate limits and mediocre deliverability at real volume. Before real users sign up at any scale, connect a transactional email provider (Resend, Postmark, SendGrid all work) under **Authentication → SMTP Settings**. Not required to launch, but plan for it before you need it.
+
+### 1.6 Grant yourself admin — manual, one SQL statement, deliberately no other way
+
+`users.is_admin` defaults to `false` for every account, including yours, and there is intentionally no signup flag, API route, or UI to change it — see `supabase/migrations/20260726000021_admin_and_exclusion_wiring.sql`. The only way to create the first admin is a manual UPDATE, run once:
+
+1. Sign up for a normal account through the app first (this creates your `public.users` row).
+2. In the Supabase dashboard, **SQL Editor**, run:
+   ```sql
+   update public.users set is_admin = true where email = 'you@example.com';
+   ```
+3. Sign out and back in. `/admin/tournaments`, `/admin/fraud`, and `/admin/disputes` are now reachable — every admin action re-checks `is_admin()` server-side on every call, so this is the only gate that matters.
+
+Grant additional admins the same way. There's no revoke UI either, by the same design choice — `update ... set is_admin = false` if you need to pull access.
 
 ---
 
@@ -250,12 +263,15 @@ vercel env add NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY production
 vercel env add TWILIO_ACCOUNT_SID production
 vercel env add TWILIO_AUTH_TOKEN production
 vercel env add TWILIO_VERIFY_SERVICE_SID production
+vercel env add CRON_SECRET production                 # see below — required for the scheduled standing recompute
 vercel --prod
 ```
 
 Each `vercel env add` prompts you to paste the value. `vercel link` connects this repo to a Vercel project — creates one on first run if none exists.
 
 **Manual fallback:** [vercel.com/new](https://vercel.com/new), import the repo, and paste each variable into **Project Settings → Environment Variables** before the first deploy.
+
+**Scheduled job:** `vercel.json` already declares a cron entry that hits `/api/cron/recompute-standing` every 30 minutes — this is what computes Skill Index, trust band, and fee tier for every player (until it runs at least once, everyone shows a blank Skill Index and the `standard` fee tier, and the leaderboard is empty). Vercel reads `vercel.json` automatically on deploy and attaches `Authorization: Bearer $CRON_SECRET` to every invocation itself, as long as `CRON_SECRET` is set on the project — generate one with `openssl rand -hex 32`. No manual cron setup needed beyond setting that one env var.
 
 ### 5.2 Match server → Fly.io
 
@@ -301,6 +317,9 @@ Run through this once everything above is live:
 - [ ] Connect a test payout account, confirm `stripe_connect_payouts_enabled` flips true
 - [ ] Request a $10 withdrawal, confirm it appears in `payouts` with status `in_transit`
 - [ ] Queue for a ranked match from two browser sessions (or two accounts), confirm the WS server pairs them and a match completes
+- [ ] Grant yourself admin (§1.6), then confirm `/admin/tournaments`, `/admin/fraud`, and `/admin/disputes` all load
+- [ ] Manually trigger `/api/cron/recompute-standing` once (`curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://yourdomain.com/api/cron/recompute-standing`) and confirm it returns `{"recomputed": N}` with `N` equal to your active user count, then check `/leaderboard` shows real rows
+- [ ] Confirm the Vercel Cron entry itself fired at least once — **Vercel Dashboard → your project → Cron Jobs** shows recent invocations
 - [ ] Flip Stripe to live mode only after all of the above pass in test mode
 
 ---

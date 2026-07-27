@@ -353,8 +353,10 @@ export function advanceRound(
 
   let updated = next
 
-  if (formatId === "single_elimination" || formatId === "satellite") {
-    // One loss ends the run.
+  if (formatId === "single_elimination" || formatId === "satellite" || formatId === "bounty") {
+    // One loss ends the run. Bounty is structurally a knockout with a side
+    // payment on elimination (see record_tournament_match_result's bounty
+    // claim) — the bracket shape itself is identical to single_elimination.
     updated = next.map((s) => (s.losses > 0 ? { ...s, eliminated: true } : s))
   } else if (formatId === "survivor") {
     updated = applySurvivorCut(next)
@@ -366,7 +368,12 @@ export function advanceRound(
   let complete = false
   let champion: string | null = null
 
-  if (formatId === "single_elimination" || formatId === "satellite" || formatId === "survivor") {
+  if (
+    formatId === "single_elimination" ||
+    formatId === "satellite" ||
+    formatId === "survivor" ||
+    formatId === "bounty"
+  ) {
     complete = active.length <= 1
     champion = complete ? (active[0] ?? null) : null
   } else {
@@ -424,7 +431,7 @@ export function planRound(
   const active = standings.filter((s) => !s.eliminated).map((s) => s.userId)
 
   const pairings =
-    formatId === "single_elimination" || formatId === "satellite"
+    formatId === "single_elimination" || formatId === "satellite" || formatId === "bounty"
       ? pairKnockoutRound(active, seeded, standings, rng)
       : pairSwissRound(active, standings, previousOpponents, rng)
 

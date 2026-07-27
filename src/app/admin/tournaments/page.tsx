@@ -15,6 +15,17 @@ export default async function AdminTournamentsPage() {
     .order("created_at", { ascending: false })
     .limit(50)
 
+  // Candidate targets for a new satellite: any standard contest still open
+  // for entry, with a higher entry fee than a satellite would realistically
+  // charge — the form itself re-validates this server-side.
+  const { data: satelliteTargets } = await supabase
+    .from("tournaments")
+    .select("id, name, entry_fee_cents")
+    .eq("status", "open")
+    .eq("kind", "tournament_standard")
+    .order("entry_fee_cents", { ascending: false })
+    .limit(50)
+
   const tournamentIds = (tournaments ?? []).map((t) => t.id)
 
   const { data: allEntries } = await supabase
@@ -46,7 +57,7 @@ export default async function AdminTournamentsPage() {
           <CardTitle>Create contest</CardTitle>
         </CardHeader>
         <CardContent>
-          <CreateTournamentForm />
+          <CreateTournamentForm satelliteTargets={satelliteTargets ?? []} />
         </CardContent>
       </Card>
 

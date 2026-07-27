@@ -1,156 +1,114 @@
 /**
- * Rate Limiting
+ * HTTP-layer rate limiting.
  *
- * Prevents abuse on sensitive endpoints:
- * - Move submission: 10 moves/second per player (prevents brute-force clicking)
- * - Deposit: 5 per minute per player (prevents spam)
- * - Withdrawal: 1 per minute per player (prevents double-submit)
- * - Match entry: 10 per minute per player (prevents multi-entry)
- * - Login: 5 failed attempts per minute, then 15-min lockout
+ * Backed by check_rate_limit() (20260726000035_http_rate_limiting.sql), a
+ * Postgres fixed-window counter — not Redis, and not the in-memory Map this
+ * file used to contain. That in-memory version was never durable across
+ * serverless invocations or multiple instances, and nothing in src/ ever
+ * imported it. See the migration for the full reasoning; short version: this
+ * platform targets ~5,000 users on infrastructure that is already just
+ * Supabase, and a new Redis dependency buys nothing at that scale for
+ * request classes (signup, login, deposit, withdrawal) far below what a
+ * single row-locked counter table can absorb.
  *
- * Uses in-memory store (suitable for 5k users; upgrade to Redis for scale).
+ * Not for in-match moves — the WS match server has its own in-process token
+ * bucket (src/server/match-server.ts) with no HTTP round trip, which matters
+ * at 5-second-clock speed. This is for the request classes a hostile script
+ * could hit at will: signup, login, deposit, withdrawal.
  */
 
-interface RateLimitConfig {
-  windowMs: number; // Time window in milliseconds
-  maxRequests: number; // Max requests in window
-  keyGenerator: (req: any) => string; // How to identify the requester
+import { createAdminClient } from "@/lib/supabase/admin"
+
+export interface RateLimitResult {
+  allowed: boolean
+  remaining: number
+  retryAfterMs: number
 }
 
-interface RateLimitEntry {
-  count: number;
-  resetAt: number;
-}
-
-class RateLimiter {
-  private store: Map<string, RateLimitEntry> = new Map();
-  private config: RateLimitConfig;
-
-  constructor(config: RateLimitConfig) {
-    this.config = config;
-
-    // Cleanup expired entries every 5 minutes
-    setInterval(() => this.cleanup(), 5 * 60 * 1000);
-  }
-
-  /**
-   * Check if a request is allowed.
-   * Returns { allowed: boolean, remaining: number, retryAfterMs: number }.
-   */
-  check(req: any): {
-    allowed: boolean;
-    remaining: number;
-    retryAfterMs: number;
-  } {
-    const key = this.config.keyGenerator(req);
-    const now = Date.now();
-    let entry = this.store.get(key);
-
-    // Initialize or reset if window expired
-    if (!entry || now > entry.resetAt) {
-      entry = { count: 0, resetAt: now + this.config.windowMs };
-      this.store.set(key, entry);
-    }
-
-    const allowed = entry.count < this.config.maxRequests;
-    const retryAfterMs = entry.resetAt - now;
-
-    entry.count++;
-
-    return {
-      allowed,
-      remaining: Math.max(0, this.config.maxRequests - entry.count),
-      retryAfterMs: allowed ? 0 : retryAfterMs,
-    };
-  }
-
-  private cleanup() {
-    const now = Date.now();
-    for (const [key, entry] of this.store.entries()) {
-      if (now > entry.resetAt) {
-        this.store.delete(key);
-      }
-    }
-  }
+export interface RateLimitBucketConfig {
+  windowMs: number
+  maxRequests: number
 }
 
 /**
- * Pre-configured rate limiters for common operations.
+ * Pre-configured buckets for the endpoints CLAUDE_CODE_BRIEF.md §4.3 names.
+ * Numbers match the ones the old in-memory limiter documented, since those
+ * figures were never the problem — durability was.
  */
+export const RATE_LIMIT_BUCKETS = {
+  signup: { windowMs: 60 * 60 * 1000, maxRequests: 5 }, // 5 signups/hour per IP
+  login: { windowMs: 60 * 1000, maxRequests: 5 }, // 5 attempts/minute per email, checked before auth so it counts every attempt, not just failures
+  deposit: { windowMs: 60 * 1000, maxRequests: 5 }, // 5/minute per user
+  withdrawal: { windowMs: 60 * 1000, maxRequests: 1 }, // 1/minute per user — prevents double-submit
+} as const satisfies Record<string, RateLimitBucketConfig>
 
-export const moveSubmissionLimiter = new RateLimiter({
-  windowMs: 1000, // 1 second
-  maxRequests: 10, // 10 moves/second per player
-  keyGenerator: (req: any) => `move:${req.playerId}`,
-});
-
-export const depositLimiter = new RateLimiter({
-  windowMs: 60 * 1000, // 1 minute
-  maxRequests: 5,
-  keyGenerator: (req: any) => `deposit:${req.userId}`,
-});
-
-export const withdrawalLimiter = new RateLimiter({
-  windowMs: 60 * 1000,
-  maxRequests: 1,
-  keyGenerator: (req: any) => `withdrawal:${req.userId}`,
-});
-
-export const matchEntryLimiter = new RateLimiter({
-  windowMs: 60 * 1000,
-  maxRequests: 10,
-  keyGenerator: (req: any) => `entry:${req.userId}`,
-});
-
-export const loginLimiter = new RateLimiter({
-  windowMs: 60 * 1000,
-  maxRequests: 5, // 5 failed login attempts
-  keyGenerator: (req: any) => `login:${req.email}`,
-});
+export type RateLimitBucket = keyof typeof RATE_LIMIT_BUCKETS
 
 /**
- * Middleware factory for Next.js route handlers.
+ * Checks and increments in one atomic call. `rateKey` is caller-chosen —
+ * typically a user id for authenticated actions, or the client IP / email
+ * for pre-auth ones (signup, login) where no user id exists yet.
  *
- * Usage in an API route:
- * ```typescript
- * export async function POST(request: NextRequest) {
- *   const check = moveSubmissionLimiter.check({
- *     playerId: userId,
- *   });
- *
- *   if (!check.allowed) {
- *     return NextResponse.json(
- *       { error: 'Too many requests', retryAfter: check.retryAfterMs },
- *       { status: 429, headers: { 'Retry-After': (check.retryAfterMs / 1000).toString() } }
- *     );
- *   }
- *
- *   // ... rest of handler
- * }
- * ```
+ * Uses the service-role client: check_rate_limit() is granted to anon and
+ * authenticated directly (see the migration), but every caller of this
+ * helper today is a "use server" action already running with service-role
+ * access, so there's no reason to route through the RLS-scoped client here.
  */
+export async function checkRateLimit(
+  bucket: RateLimitBucket,
+  rateKey: string
+): Promise<RateLimitResult> {
+  const config = RATE_LIMIT_BUCKETS[bucket]
 
-export function createRateLimitMiddleware(limiter: RateLimiter) {
-  return (req: any) => {
-    const check = limiter.check(req);
+  // FOUND BY: a real 500 on POST /login in local dev with SUPABASE_SERVICE_
+  // ROLE_KEY unset. createAdminClient() throws SYNCHRONOUSLY (the underlying
+  // @supabase/supabase-js constructor validates its args immediately) when
+  // the URL or key is missing/malformed — that throw happens before the
+  // .rpc() call this function already fails open around, so it was never
+  // caught by the try/catch below and took the whole login/signup/deposit/
+  // withdrawal action down with it. A rate limiter must never be a single
+  // point of failure for the thing it's guarding; the whole body is wrapped
+  // now, not just the network call.
+  try {
+    const admin = createAdminClient()
 
-    if (!check.allowed) {
-      return {
-        status: 429,
-        body: {
-          error: 'Too many requests',
-          retryAfter: Math.ceil(check.retryAfterMs / 1000),
-        },
-        headers: {
-          'Retry-After': Math.ceil(check.retryAfterMs / 1000).toString(),
-          'X-RateLimit-Remaining': check.remaining.toString(),
-        },
-      };
+    const { data, error } = await admin
+      .rpc("check_rate_limit", {
+        p_bucket: bucket,
+        p_rate_key: rateKey,
+        p_window_ms: config.windowMs,
+        p_max_requests: config.maxRequests,
+      })
+      .single()
+
+    if (error || !data) {
+      // Fail open rather than lock every user out on a transient DB error —
+      // consistent with this codebase's existing "log loudly, degrade
+      // gracefully" pattern for non-money-safety paths (see refundStake in
+      // sql-match-store.ts). A rate limiter that itself takes the site down
+      // on a blip is worse than the abuse it prevents.
+      console.error("[checkRateLimit] check failed, allowing request", { bucket, message: error?.message })
+      return { allowed: true, remaining: config.maxRequests, retryAfterMs: 0 }
     }
 
     return {
-      allowed: true,
-      remaining: check.remaining,
-    };
-  };
+      allowed: data.allowed,
+      remaining: data.remaining,
+      retryAfterMs: data.retry_after_ms,
+    }
+  } catch (err) {
+    console.error("[checkRateLimit] threw, allowing request", {
+      bucket,
+      message: err instanceof Error ? err.message : String(err),
+    })
+    return { allowed: true, remaining: config.maxRequests, retryAfterMs: 0 }
+  }
+}
+
+/** Human-readable "try again in..." for a refused request. */
+export function formatRetryAfter(retryAfterMs: number): string {
+  const seconds = Math.ceil(retryAfterMs / 1000)
+  if (seconds < 60) return `${seconds} second${seconds === 1 ? "" : "s"}`
+  const minutes = Math.ceil(seconds / 60)
+  return `${minutes} minute${minutes === 1 ? "" : "s"}`
 }

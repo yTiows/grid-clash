@@ -3,6 +3,7 @@
 import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
+import { FileDisputeButton } from "@/components/game/file-dispute-button"
 import { formatCents } from "@/lib/game/fees"
 import type { MatchResult as Result } from "@/lib/game/use-match-socket"
 
@@ -21,10 +22,13 @@ const REASON_COPY: Record<string, { won: string; lost: string; draw: string }> =
 
 export function MatchResultCard({
   result,
+  matchId,
   onPlayAgain,
   backHref = "/dashboard",
 }: {
   result: Result
+  /** Ranked matches only — a tournament result has no dispute affordance here. */
+  matchId?: string
   /** Omitted for tournament results — there's no queue to rejoin. */
   onPlayAgain?: () => void
   backHref?: string
@@ -76,6 +80,12 @@ export function MatchResultCard({
           <Link href={backHref}>Back to lobby</Link>
         </Button>
       </div>
+
+      {hasRankedTerms && matchId && (
+        <div className="flex justify-center pt-1">
+          <FileDisputeButton matchId={matchId} />
+        </div>
+      )}
     </div>
   )
 }
