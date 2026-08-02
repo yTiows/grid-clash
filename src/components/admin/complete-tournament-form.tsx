@@ -47,7 +47,7 @@ export function CompleteTournamentForm({
   }
 
   return (
-    <div className="space-y-3 rounded-md border-2 border-white/10 p-3">
+    <div className="space-y-3 rounded-md border-2 border-white/15 p-3">
       <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
         Finish order (1st place first)
       </p>

@@ -49,11 +49,13 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser()
   if (!user) return null
 
-  const [{ data: profile }, { data: standing }, { data: bests }, { data: milestone }] = await Promise.all([
+  // Milestone progress is intentionally not queried here — see BRAND.md §9/§11.
+  // The event still fires server-side the moment scheduling.ts's threshold is
+  // crossed; players never see it coming.
+  const [{ data: profile }, { data: standing }, { data: bests }] = await Promise.all([
     supabase.from("users").select("*").eq("id", user.id).single(),
     supabase.from("player_standing").select("*").eq("user_id", user.id).maybeSingle(),
     supabase.from("personal_bests").select("*").eq("user_id", user.id).maybeSingle(),
-    supabase.from("milestone_progress").select("*").maybeSingle(),
   ])
 
   if (!profile) {
@@ -101,52 +103,48 @@ export default async function DashboardPage() {
         </Card>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium normal-case text-muted-foreground">
-              Elo rating
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-bold">{profile.elo_rating}</CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium normal-case text-muted-foreground">
-              Skill Index
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-bold text-primary">
+      {/* Stat tiles are board cells, not admin-panel rectangles — Skill Index
+          is your standing in the actual game, so it's the one filled in your
+          color, sized up, the way a piece on the board would be. The other
+          three are real numbers but not the point of the page. */}
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+        <div className="cell cell-p1 col-span-2 flex flex-col justify-center gap-1 px-5 py-4 sm:col-span-1">
+          <span className="text-xs font-medium uppercase tracking-wide text-primary-foreground/70">
+            Skill Index
+          </span>
+          <span className="tabular text-3xl font-bold text-primary-foreground">
             {standing?.skill_index ?? "—"}
-          </CardContent>
-        </Card>
+          </span>
+        </div>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium normal-case text-muted-foreground">
-              Win streak
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-bold">
-            {bests?.current_win_streak ?? 0} 🔥
-          </CardContent>
-        </Card>
+        <div className="cell flex flex-col justify-center gap-1 px-5 py-4">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Elo
+          </span>
+          <span className="tabular text-xl font-semibold">{profile.elo_rating}</span>
+        </div>
+
+        <div className="cell flex flex-col justify-center gap-1 px-5 py-4">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Win streak
+          </span>
+          <span className="text-xl font-semibold">
+            <span className="tabular">{bests?.current_win_streak ?? 0}</span> 🔥
+          </span>
+        </div>
 
         {/* Always shown, positive or negative — it's the player's own money. */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium normal-case text-muted-foreground">
-              Net profit
-            </CardTitle>
-          </CardHeader>
-          <CardContent
-            className={`text-3xl font-bold ${netProfit >= 0 ? "text-primary" : "text-rival"}`}
+        <div className="cell flex flex-col justify-center gap-1 px-5 py-4">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Net profit
+          </span>
+          <span
+            className={`tabular text-xl font-semibold ${netProfit >= 0 ? "text-primary" : "text-rival"}`}
           >
             {netProfit >= 0 ? "+" : ""}
             {(netProfit / 100).toFixed(2)}
-          </CardContent>
-        </Card>
+          </span>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -154,8 +152,14 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle>Ranked match</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             <StakePicker feeTier={feeTier as "standard" | "established" | "elite"} ceilingCents={ceiling} />
+            <Link
+              href="/practice"
+              className="block text-center text-xs text-muted-foreground hover:text-foreground"
+            >
+              New here? Try a free practice match against a bot first →
+            </Link>
           </CardContent>
         </Card>
 
@@ -174,35 +178,13 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* CLAUDE_CODE_BRIEF.md §5.4 — a house-subsidised Milestone event is a
-          real, honest hook (the platform is adding money, not just hyping a
-          number), which is exactly why it belongs on the dashboard as a
-          live, checkable figure rather than a one-off announcement. Numbers
-          only, no editorializing, per brand/BRAND.md's "numbers speak" rule. */}
-      {milestone && milestone.threshold_cents ? (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Next Milestone event</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="h-3 overflow-hidden rounded-full border-2 border-ink bg-white/10">
-              <div
-                className="h-full bg-gold transition-all"
-                style={{
-                  width: `${Math.min(100, ((milestone.progress_cents ?? 0) / milestone.threshold_cents) * 100).toFixed(1)}%`,
-                }}
-              />
-            </div>
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span className="tabular">
-                ${((milestone.progress_cents ?? 0) / 100).toFixed(2)} of $
-                {(milestone.threshold_cents / 100).toFixed(2)} platform profit
-              </span>
-              <span>{milestone.milestones_earned ?? 0} unlocked to date</span>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
+      {/* Milestone progress used to be shown here (CLAUDE_CODE_BRIEF.md §5.4).
+          Reversed per brand/BRAND.md §9/§11 — the event is a secret until it
+          fires, not a publicly trackable meter. The threshold/progress data
+          isn't even fetched on this page anymore (see the query above), so
+          there's nothing to leak via devtools either. Once a Milestone event
+          resolves, the winner's earned title is exactly as public as any
+          other title (§9) — only the countdown to the next one is hidden. */}
 
       <p className="max-w-2xl text-xs text-muted-foreground">
         Matches are for entertainment, not a source of income. Rankings are determined solely

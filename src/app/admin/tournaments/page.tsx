@@ -72,7 +72,7 @@ export default async function AdminTournamentsPage() {
             tournaments.map((t) => (
               <div
                 key={t.id}
-                className="border-b border-white/10 py-3 last:border-0"
+                className="border-b border-white/15 py-3 last:border-0"
               >
                 <div className="flex items-center justify-between">
                   <div>

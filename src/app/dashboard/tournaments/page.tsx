@@ -79,7 +79,7 @@ export default async function TournamentsPage() {
         <h1 className="display text-2xl">Tournaments</h1>
         {loyaltyPointsCents > 0 && (
           <p className="text-sm text-muted-foreground">
-            <span className="font-bold text-gold">{formatCents(loyaltyPointsCents)}</span> in points
+            <span className="tabular font-bold text-gold">{formatCents(loyaltyPointsCents)}</span> in points
           </p>
         )}
       </div>
@@ -87,7 +87,7 @@ export default async function TournamentsPage() {
       {readyMatches && readyMatches.length > 0 && (
         <div className="space-y-3">
           {readyMatches.map((m) => (
-            <Card key={m.id} className="sticker-lift border-2 border-primary">
+            <Card key={m.id} className="panel-interactive border-2 border-primary">
               <CardContent className="flex items-center justify-between py-4">
                 <div>
                   <div className="text-xs font-bold uppercase tracking-wide text-primary">
@@ -97,7 +97,7 @@ export default async function TournamentsPage() {
                 </div>
                 <a
                   href={`/play/tournament/${m.id}`}
-                  className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md border-2 border-ink bg-primary px-4 py-2 text-sm font-bold uppercase tracking-wide text-primary-foreground shadow-[4px_4px_0_0_var(--ink)] transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_var(--ink)]"
+                  className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md border border-border bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
                 >
                   Play now
                 </a>
@@ -131,23 +131,29 @@ export default async function TournamentsPage() {
             const lowSeats = seatsLeft > 0 && seatsLeft <= Math.max(2, Math.ceil(t.field_size * 0.15))
 
             return (
-              <Card key={t.id} className={`sticker-lift ${isSatellite ? "border-2 border-gold" : ""}`}>
+              <Card key={t.id} className={`panel-interactive ${isSatellite ? "border-2 border-gold" : ""}`}>
                 {isSatellite && target && (
                   <div className="border-b-2 border-gold bg-gold/10 px-4 py-2 text-xs font-bold uppercase tracking-wide text-gold">
-                    Satellite → seat in {target.name} (${(target.prizePoolCents / 100).toFixed(2)} pool)
+                    Satellite → seat in {target.name} (
+                    <span className="tabular">${(target.prizePoolCents / 100).toFixed(2)}</span> pool)
                   </div>
                 )}
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-lg">{t.name}</CardTitle>
-                    <Badge variant={t.status === "full" ? "muted" : lowSeats ? "gold" : "default"}>
+                    <Badge
+                      variant={t.status === "full" ? "muted" : lowSeats ? "gold" : "default"}
+                      className="tabular"
+                    >
                       {seatsTaken}/{t.field_size}
                     </Badge>
                   </div>
                   {ruleset && <p className="text-xs text-muted-foreground">{ruleset.blurb}</p>}
                   <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
                     {lowSeats && t.status !== "full" && (
-                      <span className="font-bold text-gold">{seatsLeft} seat{seatsLeft === 1 ? "" : "s"} left</span>
+                      <span className="font-bold text-gold">
+                        <span className="tabular">{seatsLeft}</span> seat{seatsLeft === 1 ? "" : "s"} left
+                      </span>
                     )}
                     {t.starts_at && new Date(t.starts_at).getTime() > Date.now() && (
                       <Countdown target={t.starts_at} />

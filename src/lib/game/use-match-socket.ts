@@ -2,8 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import type { PieceKind, RedactedGameState } from "@/lib/game/engine"
-import type { ClientMessage, ServerMessage } from "@/lib/game/protocol"
+import {
+  applyOptimisticMove,
+  type Board,
+  type PieceKind,
+  type PlayerSlot,
+  type RedactedGameState,
+} from "@/lib/game/engine"
+import type { ClientMessage, RankedRulesetId, ServerMessage } from "@/lib/game/protocol"
 
 export type ConnectionPhase =
   | "idle"
@@ -26,6 +32,11 @@ export interface MatchResult {
   /** Ranked only — a tournament match settles nothing on its own. */
   payoutCents?: number
   eloDelta?: number
+  /** The final position, so the result screen can show the board a win was
+   * actually made on instead of only naming the outcome. */
+  board: Board
+  you: PlayerSlot
+  winningLine: number[] | null
 }
 
 export interface MatchSocketState {
@@ -42,6 +53,10 @@ export interface MatchSocketState {
   errorMessage: string | null
   opponentDisconnected: boolean
   graceEndsAt: number | null
+  /** True for the moment right after a drawn board replays — the UI's cue
+   * that the reset board isn't a bug, it's the match refusing to end in a
+   * draw. Cleared by the next real move. */
+  suddenDeath: boolean
 }
 
 const INITIAL_STATE: MatchSocketState = {
@@ -57,6 +72,7 @@ const INITIAL_STATE: MatchSocketState = {
   errorMessage: null,
   opponentDisconnected: false,
   graceEndsAt: null,
+  suddenDeath: false,
 }
 
 const RECONNECT_DELAY_MS = 2000
@@ -68,8 +84,38 @@ export function useMatchSocket() {
   const seqRef = useRef(0)
   const reconnectAttemptsRef = useRef(0)
   const desiredStakeRef = useRef<number | null>(null)
+  const desiredRulesetIdRef = useRef<RankedRulesetId>("classic")
   const desiredTournamentMatchIdRef = useRef<string | null>(null)
   const intentionalCloseRef = useRef(false)
+  /**
+   * Snapshot taken the instant an optimistic move is applied, so a rejection
+   * can be undone. Wiped the moment any authoritative state arrives, since
+   * there's nothing left to roll back to once the server has spoken.
+   *
+   * The error handler below rolls back whenever this is non-null, rather
+   * than checking the error's code against an allowlist of "move rejection"
+   * codes — a code-based allowlist is exactly how this broke once already:
+   * rate_limited (a real, reachable rejection of a match:move under a burst
+   * of sends) wasn't on the list, so the optimistic board stayed applied
+   * with no correction until an eventual forced-timeout burned the player's
+   * piece. Whether a snapshot is currently held is a more reliable signal
+   * than guessing which server error codes can arrive in response to a move.
+   */
+  const lastAuthoritativeRef = useRef<{
+    gameState: RedactedGameState
+    turnDeadline: number | null
+  } | null>(null)
+
+  /**
+   * True from the moment a move is optimistically applied until an
+   * authoritative message (success or rejection) resolves it. Prevents a
+   * second rapid submitMove call — a fast double-click, or a tap landing in
+   * the ~1-frame window before React commits the optimistic turn flip that
+   * disables the board — from reading an already-optimistic (unconfirmed)
+   * gameState as if it were the last known-good one and clobbering
+   * lastAuthoritativeRef with it.
+   */
+  const pendingMoveRef = useRef(false)
 
   const send = useCallback((message: ClientMessage) => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
@@ -94,6 +140,8 @@ export function useMatchSocket() {
 
       case "match:start":
         seqRef.current = message.state.moveNumber
+        lastAuthoritativeRef.current = null
+        pendingMoveRef.current = false
         setState((s) => ({
           ...s,
           phase: "matched",
@@ -105,6 +153,7 @@ export function useMatchSocket() {
           turnDeadline: message.turnDeadline,
           opponentDisconnected: false,
           graceEndsAt: null,
+          suddenDeath: false,
         }))
         return
 
@@ -118,6 +167,8 @@ export function useMatchSocket() {
 
       case "tournament:start":
         seqRef.current = message.state.moveNumber
+        lastAuthoritativeRef.current = null
+        pendingMoveRef.current = false
         setState((s) => ({
           ...s,
           phase: "matched",
@@ -129,30 +180,52 @@ export function useMatchSocket() {
           turnDeadline: message.turnDeadline,
           opponentDisconnected: false,
           graceEndsAt: null,
+          suddenDeath: false,
         }))
         return
 
       case "tournament:sudden_death":
         seqRef.current = message.state.moveNumber
+        lastAuthoritativeRef.current = null
+        pendingMoveRef.current = false
         setState((s) => ({
           ...s,
           phase: "matched",
           gameState: message.state,
           turnDeadline: message.turnDeadline,
           result: null,
+          suddenDeath: true,
         }))
         return
 
       case "match:state":
         seqRef.current = message.state.moveNumber
+        lastAuthoritativeRef.current = null
+        pendingMoveRef.current = false
         setState((s) => ({
           ...s,
           gameState: message.state,
           turnDeadline: message.turnDeadline,
+          suddenDeath: false,
+        }))
+        return
+
+      case "match:sudden_death":
+        seqRef.current = message.state.moveNumber
+        lastAuthoritativeRef.current = null
+        pendingMoveRef.current = false
+        setState((s) => ({
+          ...s,
+          gameState: message.state,
+          turnDeadline: message.turnDeadline,
+          result: null,
+          suddenDeath: true,
         }))
         return
 
       case "match:over":
+        lastAuthoritativeRef.current = null
+        pendingMoveRef.current = false
         setState((s) => ({
           ...s,
           phase: "over",
@@ -162,16 +235,27 @@ export function useMatchSocket() {
             reason: message.reason,
             payoutCents: message.payoutCents,
             eloDelta: message.eloDelta,
+            board: message.state.board,
+            you: message.state.you,
+            winningLine: message.state.winningLine,
           },
         }))
         return
 
       case "tournament:over":
+        lastAuthoritativeRef.current = null
+        pendingMoveRef.current = false
         setState((s) => ({
           ...s,
           phase: "over",
           gameState: message.state,
-          result: { result: message.result, reason: message.reason },
+          result: {
+            result: message.result,
+            reason: message.reason,
+            board: message.state.board,
+            you: message.state.you,
+            winningLine: message.state.winningLine,
+          },
         }))
         return
 
@@ -187,9 +271,27 @@ export function useMatchSocket() {
         send({ type: "pong" })
         return
 
-      case "error":
-        setState((s) => ({ ...s, errorMessage: message.message }))
+      case "error": {
+        const rollback = lastAuthoritativeRef.current
+        lastAuthoritativeRef.current = null
+        pendingMoveRef.current = false
+        setState((s) => {
+          // A pre-match rejection (ineligible stake, malformed join, a rate
+          // limit before any match exists) has no board to fall back to —
+          // leaving phase alone strands the player on "Connecting…"/"Finding
+          // an opponent" forever with no way out. Once matched, an error is a
+          // rejected move, not a reason to leave the game, so phase stays put
+          // and the rollback above is what corrects the board.
+          const isPreMatch = s.phase === "connecting" || s.phase === "queued" || s.phase === "tournament_waiting"
+          return {
+            ...s,
+            phase: isPreMatch ? "error" : s.phase,
+            errorMessage: message.message,
+            ...(rollback && { gameState: rollback.gameState, turnDeadline: rollback.turnDeadline }),
+          }
+        })
         return
+      }
     }
   }, [send])
 
@@ -242,7 +344,7 @@ export function useMatchSocket() {
           reconnectAttemptsRef.current += 1
           setTimeout(() => {
             if (desiredStakeRef.current !== null) {
-              void connect(desiredStakeRef.current)
+              void connect(desiredStakeRef.current, desiredRulesetIdRef.current)
             } else if (desiredTournamentMatchIdRef.current !== null) {
               void connectTournament(desiredTournamentMatchIdRef.current)
             }
@@ -265,12 +367,13 @@ export function useMatchSocket() {
   )
 
   const connect = useCallback(
-    async (stakeCents: number) => {
+    async (stakeCents: number, rulesetId: RankedRulesetId = "classic") => {
       intentionalCloseRef.current = false
       desiredStakeRef.current = stakeCents
+      desiredRulesetIdRef.current = rulesetId
       desiredTournamentMatchIdRef.current = null
       setState((s) => ({ ...s, phase: "connecting", errorMessage: null }))
-      await openSocket({ type: "queue:join", stakeCents })
+      await openSocket({ type: "queue:join", stakeCents, rulesetId })
     },
     [openSocket]
   )
@@ -294,10 +397,40 @@ export function useMatchSocket() {
 
   const submitMove = useCallback(
     (matchId: string, kind: PieceKind, index: number, targetIndex?: number) => {
+      // Dropped, not queued: the board is already showing the result of the
+      // in-flight move (isMyTurn goes false the instant it's applied), so a
+      // second call this soon is a double-click/double-tap, not a real
+      // second decision. Without this guard, the second call would read the
+      // first call's already-optimistic state as if it were server-
+      // confirmed and clobber the rollback snapshot with it.
+      if (pendingMoveRef.current) return
+      pendingMoveRef.current = true
+
+      // seq always comes from the last server-confirmed moveNumber, never
+      // from the optimistic one below — the board can render ahead of the
+      // server, but what gets sent over the wire never does.
+      const seq = seqRef.current
+
+      setState((s) => {
+        if (!s.gameState) {
+          pendingMoveRef.current = false
+          return s
+        }
+        lastAuthoritativeRef.current = { gameState: s.gameState, turnDeadline: s.turnDeadline }
+        return {
+          ...s,
+          gameState: applyOptimisticMove(s.gameState, s.gameState.you, {
+            kind,
+            index,
+            targetIndex,
+          }),
+        }
+      })
+
       send({
         type: "match:move",
         matchId,
-        seq: seqRef.current,
+        seq,
         kind,
         index,
         ...(targetIndex !== undefined ? { targetIndex } : {}),
@@ -317,6 +450,8 @@ export function useMatchSocket() {
     intentionalCloseRef.current = true
     desiredStakeRef.current = null
     desiredTournamentMatchIdRef.current = null
+    lastAuthoritativeRef.current = null
+    pendingMoveRef.current = false
     socketRef.current?.close(1000, "client left")
     socketRef.current = null
     setState(INITIAL_STATE)

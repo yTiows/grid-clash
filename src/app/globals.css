@@ -3,198 +3,425 @@
 @tailwind utilities;
 
 /*
-  Grid Clash visual system.
+  Grid Clash — "Instrument", tuned for game feel.
 
-  Direction pulled from poster and mylar art: hyper-saturated fills, heavy
-  black keylines, outlined display lettering with hard offset shadow, halftone
-  texture. Cartoon energy in the ink and colour, disciplined in the layout —
-  the board itself stays quiet so the pieces read instantly under a 5s clock.
+  The feeling: a precision instrument that's actually fun to hold — a
+  well-made game controller, not a chess clock behind glass. The structure
+  stays disciplined (one accent doing real work, hairline borders, mono
+  numerals, the board-cell module as the site's one visual signature); the
+  color is saturated and the motion has spring in it, because this is a
+  game and the win moment should feel like one.
 
-  No third-party marks anywhere in here. The language is the reference; the
-  trademarks are not.
+  Rules that still hold everywhere:
+   - Few colors, used deliberately, not many colors used loudly. Primary
+     (lime) is still the only color that means "you / go / win." Rival,
+     gold and accent are still contextual, not decorative — they just get
+     to be vivid within their lane instead of muted.
+   - Depth comes from a real value step, a visible border, and a small
+     neutral elevation shadow — no blur, no glow, no glassmorphism, no
+     colored light. A conventional dark-mode drop shadow is not the AI-
+     template cliché; a soft ambient bloom behind everything is.
+   - Every number that matters is set in mono. That's the one typographic
+     signature, untouched.
+   - Motion reports a state change, but it's allowed to enjoy itself doing
+     it — a landed piece gets a little spring, a won line gets a real
+     flourish. Nothing decorative loops or breathes on its own.
+
+  CONTRAST FLOOR — read before touching any token below. An earlier pass
+  set --card only ~9/255 lighter than --background (rgb(19,19,22) on
+  rgb(10,10,11)) on the theory that a hairline border alone would carry the
+  surface boundary. It doesn't, on a real display: every panel read as pure
+  black-on-black, indistinguishable from the page. Every surface token here
+  is deliberately a large, unambiguous step so this can't recur silently —
+  if you're tightening one of these steps, sanity-check it by screenshotting
+  the actual page, not by reading the hex values.
 */
 
 @layer base {
   :root {
-    /* Ink — everything is keylined against this, never against grey. */
-    --ink: #08060f;
-    --ink-soft: #140f24;
+    --background: #0a0a0b;
+    --foreground: #f4f3ee;
 
-    --background: #0d0819;
-    --foreground: #fff6e9;
+    --card: #1e1e24;
+    --card-foreground: #f4f3ee;
 
-    --card: #1a1030;
-    --card-foreground: #fff6e9;
+    --popover: #232329;
+    --popover-foreground: #f4f3ee;
 
-    --popover: #1a1030;
-    --popover-foreground: #fff6e9;
-
-    /* Acid lime — player one, primary action, win state. */
+    /* The one accent. */
     --primary: #b8ff2e;
-    --primary-foreground: #08060f;
+    --primary-foreground: #08110a;
 
-    /* Hot magenta — player two, opposition. */
-    --rival: #ff2e8b;
-    --rival-foreground: #08060f;
+    /* Opponent color — the board only. Never marketing chrome, never a button. */
+    --rival: #ff5470;
+    --rival-foreground: #1a0508;
 
-    --secondary: #241748;
-    --secondary-foreground: #fff6e9;
+    --secondary: #28282f;
+    --secondary-foreground: #f4f3ee;
 
-    --muted: #241748;
-    --muted-foreground: #a99ac9;
+    --muted: #28282f;
+    --muted-foreground: #a6a5b0;
 
-    --accent: #00e5ff;
-    --accent-foreground: #08060f;
+    /* Utility, not decoration: focus rings, the shield glyph. */
+    --accent: #35d0c0;
+    --accent-foreground: #08110a;
 
-    /* Sunburst — money, prize pools, milestone. */
-    --gold: #ffc21f;
-    --gold-foreground: #08060f;
+    /* Literal money only: balance, payout, prize pool. Vivid on purpose —
+       money is the one thing on this product that's allowed to sparkle. */
+    --gold: #ffc233;
+    --gold-foreground: #1a1103;
 
-    --violet: #8b5cf6;
-    --destructive: #ff3b30;
-    --destructive-foreground: #fff6e9;
+    --destructive: #ff5470;
+    --destructive-foreground: #1a0508;
 
-    --border: #08060f;
-    --input: #2e1d5c;
-    --ring: #b8ff2e;
+    --border: rgba(255, 255, 255, 0.16);
+    --border-strong: rgba(255, 255, 255, 0.3);
+    --input: rgba(255, 255, 255, 0.2);
+    --ring: var(--primary);
 
-    --radius: 0.875rem;
+    --radius: 0.5rem;
 
-    /* Keyline weights — the single most identity-carrying token here. */
-    --keyline: 3px;
-    --keyline-heavy: 4px;
+    /* The one spring/overshoot easing used across pieces landing, the
+       winning-line pop, and interactive buttons — named once so it isn't
+       retyped (and re-risking the Tailwind arbitrary-value ambiguity below)
+       everywhere it's used. */
+    --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 }
 
 @layer base {
   body {
     @apply bg-background text-foreground;
-    background-image:
-      radial-gradient(circle at 12% 8%, rgba(184, 255, 46, 0.1), transparent 42%),
-      radial-gradient(circle at 88% 12%, rgba(255, 46, 139, 0.12), transparent 45%),
-      radial-gradient(circle at 50% 100%, rgba(139, 92, 246, 0.14), transparent 55%);
-    background-attachment: fixed;
   }
 
   :focus-visible {
-    outline: var(--keyline) solid var(--accent);
-    outline-offset: 3px;
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
   }
 }
 
 @layer components {
-  /* Sticker card: thick black keyline + hard offset shadow, no blur. */
-  .sticker {
-    border: var(--keyline) solid var(--ink);
+  /* The one structural surface. A real value step, a visible border, and a
+     small neutral shadow so it reads as a surface at a glance — not a
+     glow, just enough elevation that content doesn't float in the void. */
+  .panel {
+    border: 1px solid var(--border);
     border-radius: var(--radius);
-    box-shadow: 6px 6px 0 0 var(--ink);
     background-color: var(--card);
+    box-shadow: 0 1px 0 0 rgba(0, 0, 0, 0.4), 0 6px 16px -8px rgba(0, 0, 0, 0.55);
   }
 
-  .sticker-lift {
-    transition: transform 120ms ease, box-shadow 120ms ease;
+  .panel-interactive {
+    transition: border-color 140ms ease, background-color 140ms ease;
   }
-  .sticker-lift:hover {
-    transform: translate(-2px, -2px);
-    box-shadow: 8px 8px 0 0 var(--ink);
-  }
-  .sticker-lift:active {
-    transform: translate(3px, 3px);
-    box-shadow: 2px 2px 0 0 var(--ink);
+  .panel-interactive:hover {
+    border-color: var(--border-strong);
   }
 
-  /* Display lettering: outlined, hard shadow, tight and loud. */
+  /* Headline weight. Used for one or two things per screen, never as a
+     default heading treatment. No stroke, no forced caps, no drop shadow. */
   .display {
-    font-weight: 900;
-    letter-spacing: -0.02em;
-    line-height: 0.92;
-    text-transform: uppercase;
-    -webkit-text-stroke: 2px var(--ink);
-    paint-order: stroke fill;
-    text-shadow: 4px 4px 0 var(--ink);
+    font-weight: 650;
+    letter-spacing: -0.025em;
+    line-height: 1.08;
   }
 
   .display-xl {
-    font-size: clamp(2.75rem, 9vw, 6rem);
+    font-size: clamp(2.25rem, 7vw, 3.75rem);
+    line-height: 1.04;
   }
 
-  /* Foil badge — prize pools and milestone counters. */
+  /* Money moments only — pair with .tabular. A restrained gold, not a foil
+     shimmer: it should read as a real figure, not a prize-wheel graphic. */
+  .money {
+    color: var(--gold);
+  }
+
+  /* The one card treatment allowed to break from .panel's neutral fill — a
+     solid gold surface for the single most important money moment (current
+     balance). Always pair with text-gold-foreground, never text-gold, or
+     the text disappears into the fill. */
   .foil {
-    background-image: linear-gradient(
-      118deg,
-      var(--gold) 0%,
-      #fff3b0 22%,
-      var(--gold) 44%,
-      #ff9d2e 68%,
-      var(--gold) 100%
-    );
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background-color: var(--gold);
     color: var(--gold-foreground);
-    border: var(--keyline) solid var(--ink);
-    box-shadow: 4px 4px 0 0 var(--ink);
   }
 
-  /* Halftone dot field, sits under content at low opacity. */
-  .halftone::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    opacity: 0.16;
-    background-image: radial-gradient(var(--ink) 1.2px, transparent 1.3px);
-    background-size: 7px 7px;
-  }
-
-  /* Board cells — quiet by default so occupied cells pop. */
+  /* Board cells — the one surface allowed a bit more presence, because it's
+     the product itself. Still flat: color and a hairline, no shadow. */
   .cell {
-    border: var(--keyline) solid var(--ink);
-    border-radius: calc(var(--radius) - 4px);
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) - 2px);
     background-color: var(--secondary);
-    transition: transform 90ms ease, background-color 90ms ease;
+    transition: transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1), background-color 100ms ease,
+      border-color 100ms ease;
   }
   .cell:hover:not(:disabled) {
     background-color: var(--input);
+    border-color: var(--border-strong);
     transform: scale(1.04);
   }
   .cell-p1 {
     background-color: var(--primary);
-    box-shadow: inset 0 -4px 0 0 rgba(8, 6, 15, 0.28);
+    border-color: transparent;
   }
   .cell-p2 {
     background-color: var(--rival);
-    box-shadow: inset 0 -4px 0 0 rgba(8, 6, 15, 0.28);
+    border-color: transparent;
   }
   .cell-shielded {
-    outline: var(--keyline) solid var(--accent);
-    outline-offset: -7px;
+    outline: 2px solid var(--accent);
+    outline-offset: -6px;
   }
   .cell-winning {
-    animation: cell-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: cell-resolve 620ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .cell-place {
+    animation: cell-place 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 }
 
-@keyframes cell-pop {
-  0%   { transform: scale(1); }
-  45%  { transform: scale(1.18) rotate(-3deg); }
-  100% { transform: scale(1); }
+/* The one moment per match that's earned a real flourish: the winning
+   line. A confident overshoot with a little wobble of rotation, not a flat
+   settle — this is the payoff frame, it should feel like one. */
+@keyframes cell-resolve {
+  0% {
+    transform: scale(1) rotate(0deg);
+  }
+  35% {
+    transform: scale(1.22) rotate(-4deg);
+  }
+  60% {
+    transform: scale(0.96) rotate(3deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* A piece landing with a little spring in it — snappy, not floaty. */
+@keyframes cell-place {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  70% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 @keyframes clock-drain {
-  from { width: 100%; }
-  to   { width: 0%; }
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes coin-spin {
+  0% {
+    transform: rotateY(0deg) scale(1);
+  }
+  80% {
+    transform: rotateY(1080deg) scale(1);
+  }
+  100% {
+    transform: rotateY(1080deg) scale(1);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* The beat between the coin flip and the clock actually starting —
+   see components/game/start-countdown.tsx. Each number gets one pop,
+   keyed by value so re-mounting on every tick replays it. */
+@keyframes countdown-pop {
+  0% {
+    transform: scale(0.35);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* One confetti piece's fall — components/game/win-celebration.tsx sets the
+   randomized start position, color, delay, and duration per piece inline,
+   this just defines the motion shape they all share. */
+@keyframes confetti-fall {
+  0% {
+    transform: translate3d(0, -10vh, 0) rotate(0deg);
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--confetti-drift, 0), 108vh, 0) rotate(var(--confetti-spin, 540deg));
+    opacity: 0;
+  }
+}
+
+/* The payout check's border draws itself in once, left to right. */
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: var(--check-length, 480);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The payout amount's arrival — a beat behind the check border finishing. */
+@keyframes payout-reveal {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* A single shine sweep across the revealed amount — the "extreme" part. */
+@keyframes payout-shine {
+  from {
+    background-position: -150% 0;
+  }
+  to {
+    background-position: 250% 0;
+  }
 }
 
 @layer utilities {
-  .text-balance { text-wrap: balance; }
-  .tabular { font-variant-numeric: tabular-nums; }
-  .keyline { border: var(--keyline) solid var(--ink); }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .tabular {
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  .keyline {
+    border: 1px solid var(--border);
+  }
+
+  /* The signature: a literal grid lattice, the same shape as the board
+     itself, sitting faintly behind the page like light falling across a
+     table. This is the one motif meant to be recognizable without a logo.
+     BUG THAT WAS HERE: the mask used to be sized as a percentage of the
+     element's own box (ellipse 65% 55%). On a short hero strip that's
+     fine; applied to a page-length wrapper (dashboard/layout.tsx did this)
+     the falloff compresses into the first screen and everything below it
+     — real page content — silently masks out to fully transparent. Fixed
+     pixel sizing means the fade always covers the same physical area
+     regardless of how tall the element it's on ends up being, so it's
+     safe to put on a full-page wrapper again if wanted. */
+  .grid-field {
+    background-image:
+      linear-gradient(to right, rgba(236, 236, 230, 0.07) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(236, 236, 230, 0.07) 1px, transparent 1px);
+    background-size: 32px 32px;
+    -webkit-mask-image: radial-gradient(ellipse 900px 550px at 50% 0%, black 40%, transparent 100%);
+    mask-image: radial-gradient(ellipse 900px 550px at 50% 0%, black 40%, transparent 100%);
+  }
+
+  .fade-up {
+    animation: fade-up 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .fade-up-1 {
+    animation-delay: 60ms;
+  }
+  .fade-up-2 {
+    animation-delay: 120ms;
+  }
+  .fade-up-3 {
+    animation-delay: 180ms;
+  }
+  .fade-up-4 {
+    animation-delay: 240ms;
+  }
+
+  .animate-countdown-pop {
+    animation: countdown-pop 500ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  /* Positioned and colored per-piece inline by win-celebration.tsx; this is
+     just the shared shape/motion every piece uses. */
+  .confetti-piece {
+    position: fixed;
+    top: -12px;
+    width: 8px;
+    height: 14px;
+    pointer-events: none;
+    animation-name: confetti-fall;
+    animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
+    animation-fill-mode: forwards;
+    z-index: 60;
+  }
+
+  .animate-check-draw {
+    animation: check-draw 900ms cubic-bezier(0.16, 1, 0.3, 1) 200ms both;
+  }
+
+  .animate-payout-reveal {
+    animation: payout-reveal 480ms cubic-bezier(0.34, 1.56, 0.64, 1) 900ms both;
+  }
+
+  .payout-shine {
+    background-image: linear-gradient(
+      100deg,
+      transparent 40%,
+      rgba(255, 255, 255, 0.75) 50%,
+      transparent 60%
+    );
+    background-size: 250% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: payout-shine 1400ms ease-out 1500ms both;
+  }
 }
 
 /* Quality floor, not decoration: the 5s clock must not induce motion sickness. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-  .sticker-lift:hover { transform: none; }
+  .fade-up,
+  .fade-up-1,
+  .fade-up-2,
+  .fade-up-3,
+  .fade-up-4 {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }

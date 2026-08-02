@@ -22,7 +22,7 @@ export default async function DashboardLayout({
     .single()
 
   return (
-    <div className="halftone relative min-h-screen">
+    <div className="relative min-h-screen">
       <DashboardNav username={profile?.username ?? "Player"} balanceCents={profile?.balance_cents ?? 0} />
       <main className="container relative py-8">{children}</main>
     </div>

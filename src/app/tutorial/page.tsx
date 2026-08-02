@@ -145,7 +145,7 @@ function MockTournamentPreview() {
           </div>
           <div>
             <div className="text-xs text-muted-foreground">Field size</div>
-            <div>{MOCK_TOURNAMENT.fieldSize} players</div>
+            <div className="tabular">{MOCK_TOURNAMENT.fieldSize} players</div>
           </div>
         </div>
         <p className="text-xs capitalize text-muted-foreground">
@@ -246,9 +246,9 @@ export default function TutorialPage() {
   }
 
   return (
-    <div className="halftone relative min-h-screen">
+    <div className="relative min-h-screen">
       <header className="container relative flex items-center justify-between py-6">
-        <Link href="/" className="display text-2xl text-primary">
+        <Link href="/" className="text-2xl font-semibold tracking-tight text-primary">
           Grid Clash
         </Link>
         <Button variant="ghost" asChild>
@@ -281,8 +281,8 @@ export default function TutorialPage() {
                 onSelect={setFocusedPiece}
                 disabled={false}
               />
-              <div className="sticker p-4">
-                <div className="display text-sm text-primary">
+              <div className="panel p-4">
+                <div className="text-sm font-semibold tracking-tight text-primary">
                   {PIECE_COPY[focusedPiece].title}
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -301,7 +301,7 @@ export default function TutorialPage() {
         )}
 
         {stage === "board" && (
-          <div className="sticker space-y-4 p-5">
+          <div className="panel space-y-4 p-5">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs text-muted-foreground">You</div>
@@ -327,7 +327,7 @@ export default function TutorialPage() {
 
         {stage === "done" && (
           <div className="space-y-6">
-            <div className="sticker space-y-3 p-8 text-center">
+            <div className="panel space-y-3 p-8 text-center">
               <div className={`display text-3xl ${outcome.className}`}>{outcome.heading}</div>
               {outcome.body && <p className="text-sm text-muted-foreground">{outcome.body}</p>}
               <Button variant="outline" size="sm" onClick={resetBoard}>
@@ -336,7 +336,7 @@ export default function TutorialPage() {
             </div>
 
             <div className="space-y-3">
-              <h2 className="display text-xl">What a tournament looks like</h2>
+              <h2 className="text-xl font-semibold tracking-tight">What a tournament looks like</h2>
               <p className="text-sm text-muted-foreground">
                 Ranked is one match, one stake. A tournament is a bracket built from one entry
                 fee per player, paying out a shared prize pool. Here&apos;s the shape of one —
@@ -345,7 +345,7 @@ export default function TutorialPage() {
               <MockTournamentPreview />
             </div>
 
-            <div className="sticker space-y-3 p-6 text-center">
+            <div className="panel space-y-3 p-6 text-center">
               <p className="text-sm text-muted-foreground">Ready to play for real?</p>
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
                 <Button size="lg" asChild>

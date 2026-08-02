@@ -194,7 +194,24 @@ export function applyMove(state: GameState, slot: PlayerSlot, move: Move): MoveR
     case "bomb": {
       if (!target) return fail(state, "Bomb needs an occupied square.")
       if (target.owner === slot) return fail(state, "Bomb can only clear an opponent's piece.")
-      if (target.shielded) return fail(state, "That piece is shielded.")
+      if (target.shielded) {
+        // In a hiddenShields format (FEINT) a disguised shield renders as a
+        // normal piece to its opponent, so a bomb attempt against one is a
+        // legitimate "test" of the bluff, not a client error — the attacker
+        // cannot have known. Rejecting it for free (no piece spent, no turn
+        // lost, nothing visible to the defender — see the old fail() path
+        // this replaces) made the shield a zero-cost oracle: probe every
+        // ambiguous cell before your real move, learn its exact location,
+        // pay nothing. Falling through here instead spends the bomb and
+        // ends the turn exactly as a real attempt would, with no board
+        // effect (the shielded piece survives) — testing now costs what
+        // attacking costs, which is what makes it a bluff call rather than
+        // a free look. Outside hiddenShields formats a shield is already
+        // visible, so attempting to bomb one is just a mistake, not an
+        // information probe — that case still fails for free below.
+        if (!state.ruleset.hiddenShields) return fail(state, "That piece is shielded.")
+        break
+      }
       board[move.index] = null
       break
     }
@@ -212,7 +229,12 @@ export function applyMove(state: GameState, slot: PlayerSlot, move: Move): MoveR
 
       const other = board[move.targetIndex] ?? null
       if (!target || !other) return fail(state, "Swap needs two occupied squares.")
-      if (target.shielded || other.shielded) return fail(state, "That piece is shielded.")
+      if (target.shielded || other.shielded) {
+        // Same rationale as the bomb case above: a hiddenShields test costs
+        // the swap and the turn, board unchanged, rather than being free.
+        if (!state.ruleset.hiddenShields) return fail(state, "That piece is shielded.")
+        break
+      }
       if (target.owner === other.owner) return fail(state, "Swap needs one piece from each player.")
 
       board[move.index] = other
@@ -251,7 +273,33 @@ export function applyMove(state: GameState, slot: PlayerSlot, move: Move): MoveR
   let status: GameStatus = "active"
   if (winner) {
     status = winner === 1 ? "player_1_won" : "player_2_won"
-  } else if (isBoardFull(board) || !hasLegalMove(board, inventories, opponentOf(slot))) {
+  } else if (
+    !hasLegalMove(board, inventories, opponentOf(slot)) &&
+    !hasLegalMove(board, inventories, slot)
+  ) {
+    // Both sides, not just the one about to move — matching applyTimeout's
+    // stuck check below. A losing player can deliberately drain their own
+    // inventory to zero via repeated timeouts (applyTimeout never ends the
+    // match on a one-sided drain, only when BOTH sides are stuck); checking
+    // only opponentOf(slot) here let that player force a draw the instant
+    // their opponent made any non-winning move, no matter how dominant that
+    // opponent's position was. If only the opponent is stuck, status stays
+    // "active" and turn passes to them as normal — their own next timeout
+    // (burns nothing, since they have nothing left) correctly passes it
+    // straight back, exactly like a real player skipping a move they can't
+    // make, until the mover either wins outright or also runs out of moves.
+    //
+    // No separate isBoardFull(board) check: hasLegalMove already folds in
+    // the empty-cell requirement for normal/shield placements, and
+    // correctly does NOT require one for bomb/swap (see its own logic) — a
+    // full board can still have a legal bomb (any unshielded opponent cell)
+    // or swap (two occupied unshielded cells) available. The old
+    // isBoardFull(board) || short-circuit would have force-ended the match
+    // in a draw the instant the last empty cell filled, even with a real
+    // bomb/swap still in hand. Unreachable for any of the 10 shipped
+    // rulesets today (none can actually fill the board — see rulesets.ts's
+    // validator), but would misfire the moment a future format's normal+
+    // shield allotment could.
     status = "draw"
   }
 
@@ -266,6 +314,70 @@ export function applyMove(state: GameState, slot: PlayerSlot, move: Move): MoveR
       winningLine,
       moveNumber: state.moveNumber + 1,
     },
+  }
+}
+
+/**
+ * Applies a move to a RedactedGameState for optimistic client rendering
+ * only — the board updates the instant a player clicks, before the round
+ * trip to the server completes. This is the browser half of the pure/dual-
+ * use design described at the top of this file.
+ *
+ * It deliberately stops short of win detection: RedactedGameState carries
+ * no ruleset, so board size and connect-target aren't knowable here across
+ * formats (Siege is 6×6 connect 5, Classic is 5×5 connect 4), and a false
+ * "you won" flash on the wrong geometry is worse than a one-frame delay.
+ * winningLine stays server-authoritative, exactly as it was before this
+ * existed — only the piece landing and the turn flip are predicted.
+ *
+ * The mover already knows their own move is legal (the UI only ever calls
+ * this for a target in legalTargets()), so there is nothing to validate
+ * here. The server remains canonical: if it disagrees, its next message
+ * simply overwrites this guess.
+ */
+export function applyOptimisticMove(
+  state: RedactedGameState,
+  slot: PlayerSlot,
+  move: Move
+): RedactedGameState {
+  const board = [...state.board]
+  const target = board[move.index] ?? null
+
+  switch (move.kind) {
+    case "normal":
+      board[move.index] = { owner: slot, shielded: false }
+      break
+
+    case "shield":
+      board[move.index] = { owner: slot, shielded: true }
+      break
+
+    case "bomb":
+      board[move.index] = null
+      break
+
+    case "swap": {
+      if (move.targetIndex === undefined) return state
+      const other = board[move.targetIndex] ?? null
+      if (!target || !other) return state
+      board[move.index] = other
+      board[move.targetIndex] = target
+      break
+    }
+
+    default:
+      return state
+  }
+
+  return {
+    ...state,
+    board,
+    turn: opponentOf(slot),
+    yourInventory: {
+      ...state.yourInventory,
+      [move.kind]: state.yourInventory[move.kind] - 1,
+    },
+    moveNumber: state.moveNumber + 1,
   }
 }
 
@@ -336,14 +448,70 @@ export interface RedactedGameState {
   moveNumber: number
 }
 
-export function redactStateFor(state: GameState, slot: PlayerSlot): RedactedGameState {
+/**
+ * `revealShields` is the showdown flag: only match-server.ts's match:over /
+ * tournament:over sends set it. Everywhere else stays false, so a
+ * hiddenShields format's bluffs resolve at the end of the match, not mid-
+ * match to a reconnect or a late state broadcast.
+ */
+export function redactStateFor(
+  state: GameState,
+  slot: PlayerSlot,
+  revealShields = false
+): RedactedGameState {
   const foe = state.inventories[opponentOf(slot)]
+
+  const board =
+    state.ruleset.hiddenShields && !revealShields
+      ? state.board.map((cell) =>
+          cell && cell.owner !== slot && cell.shielded ? { ...cell, shielded: false } : cell
+        )
+      : state.board
+
   return {
-    board: state.board,
+    board,
     turn: state.turn,
     you: slot,
     yourInventory: { ...state.inventories[slot] },
     opponentPiecesRemaining: foe.normal + foe.shield + foe.bomb + foe.swap,
+    status: state.status,
+    winningLine: state.winningLine,
+    moveNumber: state.moveNumber,
+  }
+}
+
+/**
+ * The view sent to a read-only observer — neither participant's view,
+ * favors neither side. Inventory is aggregate-only for BOTH players (a
+ * spectator with a side channel to one player must not become that
+ * player's private scout). For a hiddenShields format, shields are masked
+ * for both owners too, not revealed at showdown the way a participant's
+ * own match:over is — a spectator watching live has no showdown moment
+ * mid-match to earn that reveal from.
+ */
+export interface SpectatorGameState {
+  board: Board
+  turn: PlayerSlot
+  player1PiecesRemaining: number
+  player2PiecesRemaining: number
+  status: GameStatus
+  winningLine: number[] | null
+  moveNumber: number
+}
+
+export function redactStateForSpectator(state: GameState): SpectatorGameState {
+  const board = state.ruleset.hiddenShields
+    ? state.board.map((cell) => (cell && cell.shielded ? { ...cell, shielded: false } : cell))
+    : state.board
+
+  const inv1 = state.inventories[1]
+  const inv2 = state.inventories[2]
+
+  return {
+    board,
+    turn: state.turn,
+    player1PiecesRemaining: inv1.normal + inv1.shield + inv1.bomb + inv1.swap,
+    player2PiecesRemaining: inv2.normal + inv2.shield + inv2.bomb + inv2.swap,
     status: state.status,
     winningLine: state.winningLine,
     moveNumber: state.moveNumber,

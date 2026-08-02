@@ -26,7 +26,7 @@ export default async function AdminLayout({
     .single()
 
   return (
-    <div className="halftone relative min-h-screen">
+    <div className="relative min-h-screen">
       <DashboardNav username={profile?.username ?? "Admin"} balanceCents={profile?.balance_cents ?? 0} />
       <main className="container relative py-8">
         <div className="mb-4 inline-block rounded-md border-2 border-gold bg-gold/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-gold">

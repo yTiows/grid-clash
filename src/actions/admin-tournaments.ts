@@ -62,6 +62,22 @@ export async function createTournamentAction(
   if (entryFeeCents <= 0) {
     return { status: "error", message: "Entry fee must be positive." }
   }
+  // PURIST has zero specials and zero hidden information (no inventory to
+  // mask, board fully visible by design everywhere) on a small 5x5 board —
+  // exactly the shape of game brute-force solvers are built for. Ranked
+  // already excludes it (RANKED_RULESET_IDS in protocol.ts is
+  // classic/blitz/gambit only); this form had no equivalent guard, so a
+  // scripted account could enter a real-money PURIST tournament with a
+  // solved-position floor no other format gives it. Every tournament this
+  // action creates is real money (entryFeeCents must be positive, checked
+  // above), so there's no "practice tournament" path to carve an exception
+  // for — the fix is exclusion, not a warning.
+  if (rulesetId === "purist") {
+    return {
+      status: "error",
+      message: "Purist can't be used for a real-money tournament — no hidden information and a small enough board to be solved outright. It's practice-only.",
+    }
+  }
 
   let plan: ReturnType<typeof planTournament>
   try {

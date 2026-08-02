@@ -10,8 +10,13 @@ const config: Config = {
       screens: { "2xl": "1400px" },
     },
     extend: {
+      fontFamily: {
+        sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "monospace"],
+      },
       colors: {
         border: "var(--border)",
+        "border-strong": "var(--border-strong)",
         input: "var(--input)",
         ring: "var(--ring)",
         background: "var(--background)",
@@ -50,8 +55,6 @@ const config: Config = {
           DEFAULT: "var(--rival)",
           foreground: "var(--rival-foreground)",
         },
-        violet: "var(--violet)",
-        ink: "var(--ink)",
       },
       borderRadius: {
         lg: "var(--radius)",

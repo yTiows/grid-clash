@@ -39,14 +39,14 @@ export function ResolveDisputeForm({ disputeId }: { disputeId: string }) {
   }
 
   return (
-    <div className="space-y-3 rounded-md border-2 border-white/10 p-3">
+    <div className="panel space-y-3 p-3">
       <div className="space-y-1">
         <Label htmlFor={`status-${disputeId}`}>Resolution</Label>
         <select
           id={`status-${disputeId}`}
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="flex h-11 w-full rounded-md border-2 border-white/15 bg-black/20 px-3 py-2 text-sm text-foreground shadow-inner focus-visible:border-primary focus-visible:outline-none sm:max-w-xs"
+          className="flex h-10 w-full rounded-md border border-border bg-white/[0.06] px-3 py-2 text-sm text-foreground focus-visible:border-primary focus-visible:outline-none sm:max-w-xs"
         >
           {STATUS_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
@@ -64,7 +64,7 @@ export function ResolveDisputeForm({ disputeId }: { disputeId: string }) {
           onChange={(e) => setNote(e.target.value)}
           rows={2}
           placeholder="What did you check, and what did you decide?"
-          className="flex w-full rounded-md border-2 border-white/15 bg-black/20 px-3 py-2 text-sm text-foreground shadow-inner placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none"
+          className="flex w-full rounded-md border border-border bg-white/[0.06] px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none"
         />
       </div>
 

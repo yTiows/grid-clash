@@ -4,6 +4,8 @@ import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
 import { FileDisputeButton } from "@/components/game/file-dispute-button"
+import { MiniBoard } from "@/components/game/mini-board"
+import { Confetti, PayoutCheck } from "@/components/game/win-celebration"
 import { formatCents } from "@/lib/game/fees"
 import type { MatchResult as Result } from "@/lib/game/use-match-socket"
 
@@ -45,24 +47,38 @@ export function MatchResultCard({
   const isDraw = result.result === "draw"
   const hasRankedTerms = result.payoutCents !== undefined && result.eloDelta !== undefined
 
+  // The full check-and-confetti treatment is reserved for a real ranked/
+  // tournament win with a nonzero payout — never for practice (no real money
+  // to reveal) and never for a loss/draw (BRAND.md §6: result screens stay
+  // "flat and factual," no celebration inflation on a loss).
+  const isBigWin = isWin && hasRankedTerms && (result.payoutCents ?? 0) > 0
+
   return (
-    <div className="sticker space-y-5 p-8 text-center">
+    <div className="panel space-y-5 p-8 text-center">
+      {isBigWin && <Confetti />}
+
       <div
-        className={`display text-4xl ${isWin ? "text-primary" : isDraw ? "text-foreground" : "text-rival"}`}
+        className={`display text-3xl ${isWin ? "text-primary" : isDraw ? "text-foreground" : "text-rival"}`}
       >
         {isWin ? "Victory" : isDraw ? "Draw" : "Beaten on the board"}
       </div>
       <p className="text-muted-foreground">{message}</p>
 
+      <MiniBoard board={result.board} you={result.you} winningLine={result.winningLine} />
+
+      {isBigWin && <PayoutCheck amountCents={result.payoutCents!} />}
+
       {hasRankedTerms && (
-        <div className="sticker mx-auto max-w-xs space-y-2 p-4 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Payout</span>
-            <span className="tabular font-bold text-gold">{formatCents(result.payoutCents!)}</span>
-          </div>
+        <div className="panel mx-auto max-w-xs space-y-2 p-4 text-sm">
+          {!isBigWin && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Payout</span>
+              <span className="tabular money font-medium">{formatCents(result.payoutCents!)}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-muted-foreground">Elo change</span>
-            <span className={`tabular font-bold ${result.eloDelta! >= 0 ? "text-primary" : "text-rival"}`}>
+            <span className={`tabular font-medium ${result.eloDelta! >= 0 ? "text-primary" : "text-rival"}`}>
               {result.eloDelta! >= 0 ? "+" : ""}
               {result.eloDelta}
             </span>

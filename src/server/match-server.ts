@@ -14,14 +14,16 @@ import {
   createGame,
   opponentOf,
   redactStateFor,
-  MOVE_TIMEOUT_MS,
+  redactStateForSpectator,
   type GameState,
   type PlayerSlot,
 } from "@/lib/game/engine"
 import { getRuleset } from "@/lib/game/rulesets"
+import { seedFromId, seededRandom } from "@/lib/game/bracket"
 import {
   HEARTBEAT_INTERVAL_MS,
   HEARTBEAT_TIMEOUT_MS,
+  MATCH_START_GRACE_MS,
   RATE_LIMIT,
   RECONNECT_GRACE_MS,
   errorMessage,
@@ -70,7 +72,9 @@ export interface MatchStore {
    * nothing. Refunding by (user, amount) double-credits on any retry.
    */
   refundStake(reservationId: string): Promise<void>
-  settleMatch(input: SettlementInput): Promise<{ eloDeltaWinner: number; eloDeltaLoser: number }>
+  settleMatch(
+    input: SettlementInput
+  ): Promise<{ eloDeltaWinner: number; eloDeltaLoser: number; winnerPayoutCents: number }>
   /** True if these two accounts must never be paired. */
   arePlayersLinked(a: string, b: string): Promise<boolean>
   getPlayerCard(userId: string): Promise<{ username: string; eloRating: number }>
@@ -225,7 +229,22 @@ interface Session {
   bucket: TokenBucket
   matchId: string | null
   queuedStakeCents: number | null
+  /** Paired with queuedStakeCents to form the queue key — see queueKey(). */
+  queuedRulesetId: string | null
+  /** Set on queue join (getPlayerCard), used for proximity pairing. Stale
+   * for the lifetime of the queue wait, same tradeoff match:start's own
+   * opponent-card lookup already makes — a mid-queue rating change is not
+   * worth a re-fetch per pairing attempt. */
+  eloRating: number
+  /** Epoch ms this session entered its current queue. Null when not
+   * queued. Drives eloBandForWaitMs — see joinQueue. */
+  queuedAt: number | null
   reservationId: string | null
+  /** At most one match at a time — same one-live-thing-per-account posture
+   * as matchId. Independent of matchId: a session can't spectate its own
+   * match (joinSpectate rejects it), but isn't blocked from spectating
+   * some other match while idle. */
+  spectatingMatchId: string | null
   lastSeenAt: number
   violations: number
 }
@@ -248,8 +267,70 @@ interface LiveMatch {
   startedAt: number
   latencies: Record<PlayerSlot, number[]>
   moveSequence: string[]
+  /** Incremented by replayAsSuddenDeath. Caps ranked's exposure — see
+   * MAX_RANKED_SUDDEN_DEATH_ROUNDS. Tournament is left uncapped, matching
+   * its pre-existing behavior from before ranked also started replaying. */
+  suddenDeathRounds: number
   disconnected: Partial<Record<PlayerSlot, { since: number; timer: unknown }>>
+  /** Read-only observers. Userids, not sockets — looked up in this.sessions
+   * at broadcast time the same way players/reservations already are. */
+  spectatorUserIds: Set<string>
   settled: boolean
+}
+
+/**
+ * Five consecutive board-fills between the same two players is not
+ * something real play produces — it's a signal something is wrong
+ * (collusion, a rules exploit) rather than an unlucky match. Ranked money
+ * shouldn't sit in escrow indefinitely waiting to find out which: past
+ * this, the match settles as a genuine draw (pot split, no winner) instead
+ * of replaying again, via the normal isDraw settlement path below.
+ */
+const MAX_RANKED_SUDDEN_DEATH_ROUNDS = 5
+
+/**
+ * Elo band a queued ticket accepts, widening the longer it's waited — same
+ * shape as fees.ts's bracketsOpenAfterWait (20s steps), applied to
+ * matchmaking instead of stake brackets. A tight band protects a new
+ * player's very first queue from facing a 500-match veteran; the widening
+ * is what keeps a thin queue (an odd stake, an off-peak hour) from stalling
+ * on a match nobody in it would otherwise accept.
+ */
+function eloBandForWaitMs(waitedMs: number): number {
+  const steps = Math.floor(waitedMs / 20_000)
+  return 150 + steps * 150
+}
+
+/**
+ * Who moves first is a real, measurable edge on a board this small — see the
+ * design note above applyOptimisticMove in engine.ts. Without this, slot 1
+ * always went to whichever side of a pairing happened to be listed first
+ * (the player already waiting in queue; the higher bracket seed), which
+ * handed the same population the first-move edge on every single match
+ * instead of it washing out across a season.
+ *
+ * Seeded from matchId rather than Math.random() for the same reason bracket
+ * pairings are seeded (see bracket.ts's file header): matchId is unknown to
+ * either player before the match exists, so it can't be predicted or
+ * steered, but it is a permanent, inspectable record — a disputed "why did
+ * they always move first against me" has a verifiable answer instead of
+ * "trust the server."
+ */
+/**
+ * `round` re-derives a fresh, deterministic (auditable — same replay
+ * property as the rest of this seeding scheme) flip per sudden-death round.
+ * The initial board is round 0. Without a per-round flip, slot 1 — fixed
+ * for the whole match; see replayAsSuddenDeath's own comment on why slot
+ * assignment itself is never reshuffled — held the first-move edge on
+ * every single board a match went to sudden death on, not just the
+ * original one. The "unbiased across a season" fairness argument for the
+ * coin flip only holds if each board gets its own flip; one flip governing
+ * every board of a match that draws repeatedly concentrates the edge on
+ * whichever physical player happened to win it, against that one opponent,
+ * for the rest of that contest.
+ */
+function coinFlipGivesFirstSlotTo(matchId: string, round = 0): boolean {
+  return seededRandom(seedFromId(matchId) + round * 104_729)() < 0.5
 }
 
 export interface MatchServerOptions {
@@ -263,7 +344,9 @@ export interface MatchServerOptions {
 export class MatchServer {
   private readonly sessions = new Map<string, Session>()
   private readonly matches = new Map<string, LiveMatch>()
-  private readonly queues = new Map<number, string[]>()
+  /** Keyed by queueKey(stakeCents, rulesetId) — players only match others
+   * queued at the same stake AND the same format. */
+  private readonly queues = new Map<string, string[]>()
   /**
    * First player to send tournament:join for a given tournamentMatchId waits
    * here for the second. Unlike the ranked queues, there's exactly one valid
@@ -319,7 +402,11 @@ export class MatchServer {
       bucket: new TokenBucket(this.clock),
       matchId: null,
       queuedStakeCents: null,
+      queuedRulesetId: null,
+      eloRating: 1600,
+      queuedAt: null,
       reservationId: null,
+      spectatingMatchId: null,
       lastSeenAt: this.clock.now(),
       violations: 0,
     })
@@ -360,7 +447,7 @@ export class MatchServer {
       case "pong":
         return
       case "queue:join":
-        return this.joinQueue(session, message.stakeCents)
+        return this.joinQueue(session, message.stakeCents, message.rulesetId)
       case "queue:leave":
         return this.leaveQueue(session)
       case "tournament:join":
@@ -369,6 +456,10 @@ export class MatchServer {
         return this.handleMove(session, message)
       case "match:resign":
         return this.handleResign(session, message.matchId)
+      case "spectate:join":
+        return this.joinSpectate(session, message.matchId)
+      case "spectate:leave":
+        return this.leaveSpectate(session, session.spectatingMatchId)
     }
   }
 
@@ -387,7 +478,13 @@ export class MatchServer {
 
   // --- Matchmaking ----------------------------------------------------------
 
-  private async joinQueue(session: Session, stakeCents: number): Promise<void> {
+  /** Ranked queues partition by format as well as stake — a Classic $5 queue
+   * and a Gambit $5 queue never pair with each other. */
+  private queueKey(stakeCents: number, rulesetId: string): string {
+    return `${stakeCents}:${rulesetId}`
+  }
+
+  private async joinQueue(session: Session, stakeCents: number, rulesetId: string): Promise<void> {
     if (session.matchId) return this.send(session, errorMessage("not_in_match"))
 
     /**
@@ -398,10 +495,20 @@ export class MatchServer {
     const reservationId = await this.options.store.reserveStake(session.userId, stakeCents)
     if (!reservationId) return this.send(session, errorMessage("ineligible"))
     session.reservationId = reservationId
+    session.eloRating = (await this.options.store.getPlayerCard(session.userId)).eloRating
 
-    const queue = this.queues.get(stakeCents) ?? []
+    const key = this.queueKey(stakeCents, rulesetId)
+    const queue = this.queues.get(key) ?? []
 
     /**
+     * Elo-proximity pairing, not first-in-line: a brand-new account and a
+     * 500-match veteran queuing the same stake at the same instant is the
+     * single worst thing this queue could do to either of them. Every
+     * candidate is scored; the closest-rated one within the accepted band
+     * wins, and the band widens the longer a ticket has waited
+     * (eloBandForWaitMs) so a thin queue still resolves instead of stalling
+     * on a match nobody in it would accept.
+     *
      * THREAT: two colluders queue at the same instant at an unusual stake to
      * be paired, then dump the match to move money between accounts while
      * every individual transaction looks ordinary.
@@ -410,13 +517,14 @@ export class MatchServer {
      * post-hoc review because a settled collusive match has already moved
      * money.
      */
+    let bestIndex = -1
+    let bestCandidate: Session | null = null
+    let bestDistance = Infinity
+
     for (let i = 0; i < queue.length; i++) {
       const candidateId = queue[i]
       if (!candidateId) continue
       if (candidateId === session.userId) continue
-
-      const linked = await this.options.store.arePlayersLinked(session.userId, candidateId)
-      if (linked) continue
 
       const candidate = this.sessions.get(candidateId)
       if (!candidate) {
@@ -425,28 +533,50 @@ export class MatchServer {
         continue
       }
 
-      queue.splice(i, 1)
-      this.queues.set(stakeCents, queue)
-      await this.startMatch(candidate, session, stakeCents)
+      const linked = await this.options.store.arePlayersLinked(session.userId, candidateId)
+      if (linked) continue
+
+      const waitedMs = this.clock.now() - (candidate.queuedAt ?? this.clock.now())
+      const band = eloBandForWaitMs(waitedMs)
+      const distance = Math.abs(candidate.eloRating - session.eloRating)
+      if (distance > band) continue
+
+      if (distance < bestDistance) {
+        bestDistance = distance
+        bestIndex = i
+        bestCandidate = candidate
+      }
+    }
+
+    if (bestCandidate && bestIndex >= 0) {
+      queue.splice(bestIndex, 1)
+      this.queues.set(key, queue)
+      await this.startMatch(bestCandidate, session, stakeCents, rulesetId)
       return
     }
 
+    session.queuedAt = this.clock.now()
     queue.push(session.userId)
-    this.queues.set(stakeCents, queue)
+    this.queues.set(key, queue)
     session.queuedStakeCents = stakeCents
+    session.queuedRulesetId = rulesetId
     this.send(session, { type: "queue:waiting", position: queue.length, stakeCents })
   }
 
   private async leaveQueue(session: Session): Promise<void> {
     const stake = session.queuedStakeCents
-    if (stake === null) return
+    const rulesetId = session.queuedRulesetId
+    if (stake === null || rulesetId === null) return
 
-    const queue = this.queues.get(stake) ?? []
+    const key = this.queueKey(stake, rulesetId)
+    const queue = this.queues.get(key) ?? []
     const index = queue.indexOf(session.userId)
     if (index >= 0) queue.splice(index, 1)
-    this.queues.set(stake, queue)
+    this.queues.set(key, queue)
 
     session.queuedStakeCents = null
+    session.queuedRulesetId = null
+    session.queuedAt = null
     if (session.reservationId) {
       await this.options.store.refundStake(session.reservationId)
       session.reservationId = null
@@ -454,25 +584,37 @@ export class MatchServer {
     this.send(session, { type: "queue:left" })
   }
 
-  private async startMatch(a: Session, b: Session, stakeCents: number): Promise<void> {
+  private async startMatch(
+    a: Session,
+    b: Session,
+    stakeCents: number,
+    rulesetId: string
+  ): Promise<void> {
     const matchId = randomUUID()
-    const state = createGame()
+    const ruleset = getRuleset(rulesetId)
+    const state = createGame(ruleset)
+
+    // Coin flip: matchId doesn't exist until the line above, so neither
+    // player nor queue order can influence who gets it.
+    const [p1, p2] = coinFlipGivesFirstSlotTo(matchId) ? [a, b] : [b, a]
 
     const match: LiveMatch = {
       id: matchId,
       kind: "ranked",
-      rulesetId: "classic",
+      rulesetId,
       stakeCents,
       state,
-      players: { 1: a.userId, 2: b.userId },
-      reservations: { 1: a.reservationId ?? "", 2: b.reservationId ?? "" },
-      turnDeadline: this.clock.now() + MOVE_TIMEOUT_MS,
+      players: { 1: p1.userId, 2: p2.userId },
+      reservations: { 1: p1.reservationId ?? "", 2: p2.reservationId ?? "" },
+      turnDeadline: this.clock.now() + ruleset.moveTimeoutMs + MATCH_START_GRACE_MS,
       turnStartedAt: this.clock.now(),
       turnTimer: null,
       startedAt: this.clock.now(),
       latencies: { 1: [], 2: [] },
       moveSequence: [],
+      suddenDeathRounds: 0,
       disconnected: {},
+      spectatorUserIds: new Set(),
       settled: false,
     }
 
@@ -480,27 +622,31 @@ export class MatchServer {
     a.matchId = matchId
     b.matchId = matchId
     a.queuedStakeCents = null
+    a.queuedRulesetId = null
+    a.queuedAt = null
     b.queuedStakeCents = null
+    b.queuedRulesetId = null
+    b.queuedAt = null
     a.reservationId = null
     b.reservationId = null
 
-    const [cardA, cardB] = await Promise.all([
-      this.options.store.getPlayerCard(a.userId),
-      this.options.store.getPlayerCard(b.userId),
+    const [card1, card2] = await Promise.all([
+      this.options.store.getPlayerCard(p1.userId),
+      this.options.store.getPlayerCard(p2.userId),
     ])
 
-    this.send(a, {
+    this.send(p1, {
       type: "match:start",
       matchId,
-      opponent: cardB,
+      opponent: card2,
       stakeCents,
       state: redactStateFor(state, 1),
       turnDeadline: match.turnDeadline,
     })
-    this.send(b, {
+    this.send(p2, {
       type: "match:start",
       matchId,
-      opponent: cardA,
+      opponent: card1,
       stakeCents,
       state: redactStateFor(state, 2),
       turnDeadline: match.turnDeadline,
@@ -566,14 +712,40 @@ export class MatchServer {
   }
 
   private async startTournamentMatch(a: Session, b: Session, matchup: TournamentMatchup): Promise<void> {
+    /**
+     * THREAT: the exact collusion pattern joinQueue already guards against
+     * for ranked (see its comment above) — two linked accounts drawn into
+     * the same bracket, one dumping the match to the other — but bracket.ts's
+     * pairing (planRound/pairSwissRound/pairKnockoutRound) is a pure
+     * function of entrant list, standings, and a deterministic seed with no
+     * store access, so it can't be the enforcement point. This is the last
+     * gate before a live match — and, for Bounty, real money — is at stake.
+     * A caught pair is refused here rather than started and reviewed after
+     * the fact, matching ranked's "never pair, don't just flag" posture.
+     * This leaves the tournament_matches row unresolved for this pairing,
+     * same as any other stuck bracket slot — an admin resolves it manually,
+     * the same path a disputed or automation-flagged match already needs.
+     */
+    if (await this.options.store.arePlayersLinked(a.userId, b.userId)) {
+      this.send(a, errorMessage("ineligible"))
+      this.send(b, errorMessage("ineligible"))
+      return
+    }
+
     const matchId = randomUUID()
     const ruleset = getRuleset(matchup.rulesetId)
     const state = createGame(ruleset)
 
-    // Bracket seeding already decided who's who; slot assignment here is only
-    // about which socket is 1 vs 2, not a fairness question ranked's random
-    // first-player pick has to answer.
-    const [p1, p2] = matchup.player1 === a.userId ? [a, b] : [b, a]
+    // Bracket seeding (matchup.player1/player2) decided the *pairing* — who
+    // plays whom — and stays exactly as seeded; recordTournamentResult below
+    // looks players up by match.players, never by this local p1/p2, so
+    // renaming who holds engine slot 1 here has no effect on the bracket.
+    // But which physical player gets the first-move edge is a different
+    // question, and handing it to whichever side the seed happened to list
+    // first would double the higher seed's advantage (easier path AND first
+    // move, every round) instead of leaving it purely to seeding as
+    // intended. Coin-flipped the same way ranked is.
+    const [p1, p2] = coinFlipGivesFirstSlotTo(matchId) ? [a, b] : [b, a]
 
     const match: LiveMatch = {
       id: matchId,
@@ -584,13 +756,15 @@ export class MatchServer {
       state,
       players: { 1: p1.userId, 2: p2.userId },
       reservations: { 1: "", 2: "" },
-      turnDeadline: this.clock.now() + ruleset.moveTimeoutMs,
+      turnDeadline: this.clock.now() + ruleset.moveTimeoutMs + MATCH_START_GRACE_MS,
       turnStartedAt: this.clock.now(),
       turnTimer: null,
       startedAt: this.clock.now(),
       latencies: { 1: [], 2: [] },
       moveSequence: [],
+      suddenDeathRounds: 0,
       disconnected: {},
+      spectatorUserIds: new Set(),
       settled: false,
     }
 
@@ -701,7 +875,7 @@ export class MatchServer {
       if (match.settled) return
 
       const slot = match.state.turn
-      match.latencies[slot].push(MOVE_TIMEOUT_MS)
+      match.latencies[slot].push(getRuleset(match.rulesetId).moveTimeoutMs)
       match.state = applyTimeout(match.state, slot)
       this.advanceTurn(match)
 
@@ -714,9 +888,14 @@ export class MatchServer {
     }, Math.max(0, match.turnDeadline - this.clock.now()))
   }
 
-  private advanceTurn(match: LiveMatch): void {
+  /**
+   * graceMs is nonzero only for a fresh board (replayAsSuddenDeath) — every
+   * ordinary move keeps the plain ruleset clock, so a normal turn can never
+   * gain time by design.
+   */
+  private advanceTurn(match: LiveMatch, graceMs = 0): void {
     match.turnStartedAt = this.clock.now()
-    match.turnDeadline = match.turnStartedAt + getRuleset(match.rulesetId).moveTimeoutMs
+    match.turnDeadline = match.turnStartedAt + getRuleset(match.rulesetId).moveTimeoutMs + graceMs
     this.armTurnTimer(match)
   }
 
@@ -734,6 +913,77 @@ export class MatchServer {
         ...(timedOut ? { timedOut: true } : {}),
       })
     }
+    this.broadcastToSpectators(match)
+  }
+
+  // --- Spectating -------------------------------------------------------
+
+  /**
+   * THREAT: a spectator with a private channel to one player (voice call,
+   * second monitor) becomes that player's scout if they can see anything
+   * the opponent can't. redactStateForSpectator is symmetric by
+   * construction — neither player's inventory breakdown, and a
+   * hiddenShields format stays masked for both, not just the opponent —
+   * so watching is never better than either player's own view.
+   */
+  private joinSpectate(session: Session, matchId: string): void {
+    if (session.spectatingMatchId && session.spectatingMatchId !== matchId) {
+      this.leaveSpectate(session, session.spectatingMatchId)
+    }
+
+    const match = this.matches.get(matchId)
+    if (!match || match.settled) return this.send(session, errorMessage("not_in_match"))
+    if (this.slotOf(match, session.userId)) return this.send(session, errorMessage("not_in_match"))
+
+    match.spectatorUserIds.add(session.userId)
+    session.spectatingMatchId = matchId
+    this.send(session, {
+      type: "spectate:state",
+      matchId,
+      state: redactStateForSpectator(match.state),
+      turnDeadline: match.turnDeadline,
+    })
+  }
+
+  private leaveSpectate(session: Session, matchId: string | null): void {
+    if (!matchId) return
+    const match = this.matches.get(matchId)
+    if (match) match.spectatorUserIds.delete(session.userId)
+    if (session.spectatingMatchId === matchId) session.spectatingMatchId = null
+  }
+
+  private broadcastToSpectators(match: LiveMatch): void {
+    if (match.spectatorUserIds.size === 0) return
+    const message: ServerMessage = {
+      type: "spectate:state",
+      matchId: match.id,
+      state: redactStateForSpectator(match.state),
+      turnDeadline: match.turnDeadline,
+    }
+    for (const userId of match.spectatorUserIds) {
+      const session = this.sessions.get(userId)
+      if (session) this.send(session, message)
+    }
+  }
+
+  /** Called once, at settlement, instead of broadcastToSpectators — a
+   * different message shape (spectate:over, with a winner rather than a
+   * ticking clock) and the last thing a spectator hears about this match. */
+  private notifySpectatorsOfResult(match: LiveMatch, winnerSlot: PlayerSlot | null): void {
+    if (match.spectatorUserIds.size === 0) return
+    const message: ServerMessage = {
+      type: "spectate:over",
+      matchId: match.id,
+      state: redactStateForSpectator(match.state),
+      winnerSlot,
+    }
+    for (const userId of match.spectatorUserIds) {
+      const session = this.sessions.get(userId)
+      if (session) {
+        this.send(session, message)
+        session.spectatingMatchId = null
+      }
+    }
   }
 
   // --- Disconnect handling --------------------------------------------------
@@ -744,9 +994,9 @@ export class MatchServer {
 
     this.sessions.delete(userId)
 
-    if (session.queuedStakeCents !== null) {
-      const stake = session.queuedStakeCents
-      const queue = this.queues.get(stake) ?? []
+    if (session.queuedStakeCents !== null && session.queuedRulesetId !== null) {
+      const key = this.queueKey(session.queuedStakeCents, session.queuedRulesetId)
+      const queue = this.queues.get(key) ?? []
       const index = queue.indexOf(userId)
       if (index >= 0) queue.splice(index, 1)
       if (session.reservationId) {
@@ -760,6 +1010,11 @@ export class MatchServer {
       if (waitingSession.userId === userId) {
         this.tournamentWaiting.delete(tournamentMatchId)
       }
+    }
+
+    if (session.spectatingMatchId) {
+      const spectated = this.matches.get(session.spectatingMatchId)
+      if (spectated) spectated.spectatorUserIds.delete(userId)
     }
 
     if (!session.matchId) return
@@ -838,12 +1093,22 @@ export class MatchServer {
     const isDraw = winnerSlot === null
 
     /**
-     * A bracket needs exactly one winner to advance. Resign and abandon
-     * always pass forcedWinner, so the only way here is a natural
-     * board_full/no_legal_moves draw — replayed as sudden death rather than
-     * settled. match.settled stays false: this match is not over.
+     * A competitive match — ranked or bracket — should produce exactly one
+     * winner. Resign and abandon always pass forcedWinner, so the only way
+     * here is a natural board_full/no_legal_moves draw: replayed as sudden
+     * death on a fresh board rather than settled as a draw. Stakes and
+     * reservations are untouched, so nothing about a ranked player's held
+     * funds changes by replaying instead of settling. match.settled stays
+     * false: this match is not over.
+     *
+     * Ranked stops replaying past MAX_RANKED_SUDDEN_DEATH_ROUNDS and falls
+     * through to a real draw settlement instead — see that constant's
+     * comment. Tournament has no cap, unchanged from before ranked also
+     * started replaying: a bracket needs a winner, and an unresolved
+     * bracket match is the pre-existing, already-accepted behavior this
+     * change didn't introduce.
      */
-    if (match.kind === "tournament" && isDraw) {
+    if (isDraw && (match.kind === "tournament" || match.suddenDeathRounds < MAX_RANKED_SUDDEN_DEATH_ROUNDS)) {
       this.replayAsSuddenDeath(match)
       return
     }
@@ -878,13 +1143,18 @@ export class MatchServer {
           type: "tournament:over",
           matchId: match.id,
           tournamentMatchId: match.tournamentMatchId as string,
-          state: redactStateFor(match.state, slot),
+          // Showdown reveal: true shield state, not the in-match masked
+          // view — a hiddenShields format's bluffs are meant to resolve at
+          // the end, not stay a mystery forever. See engine.ts's
+          // redactStateFor.
+          state: redactStateFor(match.state, slot, true),
           result: slot === winnerSlot ? "won" : "lost",
           reason: reason as TournamentSettlementInput["reason"],
         })
         session.matchId = null
       }
 
+      this.notifySpectatorsOfResult(match, winnerSlot)
       this.matches.delete(match.id)
       return
     }
@@ -910,43 +1180,88 @@ export class MatchServer {
       this.send(session, {
         type: "match:over",
         matchId: match.id,
-        state: redactStateFor(match.state, slot),
+        // Showdown reveal — see the tournament:over send above.
+        state: redactStateFor(match.state, slot, true),
         result: isDraw ? "draw" : isWinner ? "won" : "lost",
         reason,
-        payoutCents: 0, // populated by the store layer's return in production wiring
+        // A draw refunds both stakes (settleMatch's winnerPayoutCents ==
+        // stakeCents in that case); a decisive result pays only the actual
+        // winner — the loser gets 0, not the winner's number. Was
+        // hardcoded to 0 unconditionally before, so the result screen
+        // never showed a real amount for anyone, winner included, even
+        // though the wallet credit itself was already correct.
+        payoutCents: isDraw || isWinner ? settlement.winnerPayoutCents : 0,
         eloDelta: isWinner ? settlement.eloDeltaWinner : settlement.eloDeltaLoser,
       })
       session.matchId = null
     }
 
+    this.notifySpectatorsOfResult(match, winnerSlot)
     this.matches.delete(match.id)
   }
 
   /**
    * Board filled, or both ran out of legal moves, with no line completed.
-   * Same two players, fresh board, same ruleset — the match stays in
-   * `this.matches` under the same id so reconnection during sudden death
-   * still finds it via the normal reattach path in handleConnection.
+   * Same two players, fresh board, same ruleset, same stake/reservations —
+   * the match stays in `this.matches` under the same id so reconnection
+   * during sudden death still finds it via the normal reattach path in
+   * handleConnection.
+   *
+   * Slot 1 vs 2 is NOT re-flipped between rounds: doing so would mean
+   * reshuffling which reservation belongs to which slot mid-match, and that
+   * bookkeeping is a real-money correctness risk this rare a tail case
+   * doesn't justify.
+   *
+   * WHO MOVES FIRST on the fresh board is re-flipped every round, though —
+   * createGame() defaults turn:1, which used to mean slot 1 held the
+   * first-move edge on every single sudden-death board, not just the
+   * original one, concentrating a real structural advantage on one physical
+   * player against one specific opponent for the rest of that match. The
+   * per-round flip below is what actually makes "unbiased across the
+   * population of matches" true within a match that draws repeatedly, not
+   * just across separate matches.
    */
   private replayAsSuddenDeath(match: LiveMatch): void {
     const ruleset = getRuleset(match.rulesetId)
     match.state = createGame(ruleset)
-    match.moveSequence = []
-    match.latencies = { 1: [], 2: [] }
-    match.startedAt = this.clock.now()
+    match.suddenDeathRounds += 1
 
-    this.advanceTurn(match)
+    if (!coinFlipGivesFirstSlotTo(match.id, match.suddenDeathRounds)) {
+      match.state = { ...match.state, turn: 2 }
+    }
+
+    // Appended, not reset. The eventual settlement record (matches.duration
+    // and match_replays' move/timing history — the same data bracket.ts's
+    // header calls "resolvable" evidence for a dispute) needs every round
+    // that was actually played, not just the one that happened to decide
+    // it. startedAt stays at the true match start for the same reason:
+    // durationSeconds should reflect the real time both players spent, not
+    // just the final board.
+    match.moveSequence.push(`--- sudden death round ${match.suddenDeathRounds}: fresh board ---`)
+
+    this.advanceTurn(match, MATCH_START_GRACE_MS)
 
     for (const slot of [1, 2] as const) {
       const session = this.sessions.get(match.players[slot])
       if (!session) continue
-      this.send(session, {
-        type: "tournament:sudden_death",
-        tournamentMatchId: match.tournamentMatchId as string,
-        state: redactStateFor(match.state, slot),
-        turnDeadline: match.turnDeadline,
-      })
+      this.send(
+        session,
+        match.kind === "tournament"
+          ? {
+              type: "tournament:sudden_death",
+              tournamentMatchId: match.tournamentMatchId as string,
+              state: redactStateFor(match.state, slot),
+              turnDeadline: match.turnDeadline,
+            }
+          : {
+              type: "match:sudden_death",
+              matchId: match.id,
+              state: redactStateFor(match.state, slot),
+              turnDeadline: match.turnDeadline,
+            }
+      )
     }
+    this.broadcastToSpectators(match)
   }
 
   // --- Liveness -------------------------------------------------------------

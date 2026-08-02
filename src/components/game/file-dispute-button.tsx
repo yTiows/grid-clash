@@ -69,7 +69,7 @@ export function FileDisputeButton({ matchId }: { matchId: string }) {
         placeholder="What looked wrong?"
         rows={3}
         maxLength={2000}
-        className="flex w-full rounded-md border-2 border-white/15 bg-black/20 px-3 py-2 text-sm text-foreground shadow-inner placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none"
+        className="flex w-full rounded-md border border-border bg-white/[0.06] px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none"
       />
       {message?.error && <p className="text-xs text-rival">{message.text}</p>}
       <div className="flex justify-end gap-2">

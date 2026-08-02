@@ -1,7 +1,26 @@
 import type { Metadata } from "next"
+import { Inter, JetBrains_Mono } from "next/font/google"
 
 import "./globals.css"
 import { breakEvenWinRate, formatPercent, FEE_TIERS } from "@/lib/game/fees"
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+})
+
+/**
+ * Every number that matters — the clock, Elo, stakes, coordinates — renders
+ * in mono. It's the one typographic signature the whole system hangs off:
+ * precision as a visual idea, not just a claim in the copy.
+ */
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-mono",
+  display: "swap",
+})
 
 // FOUND BY: the same "2% fee" drift already fixed on the landing page
 // (src/app/page.tsx) and caught here by a parallel review of this session's
@@ -22,7 +41,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${inter.variable} ${mono.variable}`}>
       <body className="min-h-screen font-sans antialiased">{children}</body>
     </html>
   )

@@ -35,8 +35,10 @@ export function PieceTray({
             title={meta.hint}
             disabled={isDisabled}
             onClick={() => onSelect(kind)}
-            className={`sticker flex flex-col items-center gap-0.5 py-2 transition-all disabled:cursor-not-allowed disabled:opacity-30 ${
-              isSelected ? "bg-primary text-primary-foreground" : "hover:bg-white/5"
+            className={`panel panel-interactive flex flex-col items-center gap-0.5 py-2 transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-30 ${
+              isSelected
+                ? "border-primary bg-primary text-primary-foreground"
+                : "hover:bg-white/[0.08]"
             }`}
           >
             <span className="text-lg leading-none">{meta.icon}</span>

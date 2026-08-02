@@ -20,7 +20,7 @@ function ChecklistRow({
   action: React.ReactNode
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-white/10 py-3 last:border-0">
+    <div className="flex items-center justify-between gap-4 border-b border-white/15 py-3 last:border-0">
       <div className="flex items-center gap-2">
         <span className={done ? "text-primary" : "text-muted-foreground"}>{done ? "✓" : "○"}</span>
         <span className="text-sm">{label}</span>
@@ -132,7 +132,7 @@ export default async function WalletPage() {
           <CardContent className="space-y-2">
             {payouts.map((p) => (
               <div key={p.id} className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">
+                <span className="tabular text-muted-foreground">
                   {new Date(p.requested_at).toLocaleDateString()}
                 </span>
                 <span className="tabular font-semibold">${(p.amount_cents / 100).toFixed(2)}</span>

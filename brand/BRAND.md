@@ -10,7 +10,7 @@ Version 1.0 · Internal
 
 Every stakes game in this category takes 15–40% and calls the result a contest of skill. At those numbers a player needs a 60–70% win rate before they profit, and ranked matchmaking is engineered to hold everyone near 50%. The skill claim is decorative — the arithmetic contradicts it.
 
-Grid Clash takes 1% on ranked. Break-even lands at **50.51%**. A genuinely strong player clears it and earns.
+Grid Clash takes 10% on ranked, down to 5% for our best players. Break-even lands at **55.56%** (52.63% at the top tier). A genuinely strong player clears it and earns.
 
 That is the whole purpose. Not "play games," not "win big" — close the gap between what the category claims and what its math permits.
 
@@ -33,7 +33,7 @@ The name's asset is what it doesn't say. No "royale," no "arena," no "coin," "ca
 
 ## 3. Positioning statement
 
-> For competitive people who spend on entertainment and want their skill to actually count, **Grid Clash** is a stakes game where a 50.5% win rate turns a profit — because we take 1% where the category takes 15–40%.
+> For competitive people who spend on entertainment and want their skill to actually count, **Grid Clash** is a stakes game where a bit above break-even turns a profit — because we take 10% where the category takes 15–40%, and as little as 5% once you've proven you belong here.
 >
 > Unlike casino products dressed as skill games, our break-even number is printed on the screen.
 
@@ -63,7 +63,7 @@ The operating posture is Sage — published rake, live profit ledger, break-even
 
 Not "get rich." That's false at any rake and refusing to say it is a positioning decision, not a compliance one.
 
-The real payload is narrower and truer: within about 30 matches, Elo tells you your actual level, and at 1% rake that level has real consequences. The feeling we sell is **being right about a person under pressure with incomplete information** — you didn't know what they were holding, you read them anyway, and the read was correct.
+The real payload is narrower and truer: within about 30 matches, Elo tells you your actual level, and at a 5–10% rake that level has real consequences. The feeling we sell is **being right about a person under pressure with incomplete information** — you didn't know what they were holding, you read them anyway, and the read was correct.
 
 That's a poker feeling, and it's the honest emotional core of a game built on hidden inventory and a five-second clock.
 
@@ -111,7 +111,7 @@ Never, in any surface, including loss states and marketing:
 | Result screens | Flat and factual. No consolation, no celebration inflation. |
 | Money surfaces | Plainest register in the product. Boring on purpose. |
 | Limits & self-exclusion | Neutral and frictionless. Never discourage, never editorialise. |
-| Marketing | Confident, specific, unhyped. Lead with the 1%. |
+| Marketing | Confident, specific, unhyped. Lead with the 10%, earn the 5%. |
 
 ---
 
@@ -176,7 +176,9 @@ Someone who has taken an Obsidian tournament *is* an Obsidian. That's the demony
 
 **The line this respects:** money terms are always explicit. Entry fee, field size, prize pool, and rake are stated up front on every contest, every time. Only the *cosmetic* meaning is left to discovery. Nothing discoverable affects odds, payouts, or cost. That distinction is what makes this mystery rather than obfuscation, and it is not negotiable — the moment a hidden treatment carries a money consequence, it becomes an undisclosed term.
 
-**Milestone is the rarest and is never sold.** It exists only when the published profit ledger crosses another $1,000. It cannot be bought, gifted, or granted.
+**Milestone is the rarest and is never sold.** It exists only when the profit ledger crosses another $20,000 (`MILESTONE_PROFIT_THRESHOLD_CENTS`, `src/lib/game/scheduling.ts`). It cannot be bought, gifted, or granted.
+
+**The threshold and live progress toward it are never shown to players.** No progress bar, no "$X of $Y," no countdown — the event should land as a surprise, not a publicly-trackable meter. The title itself, once won, is exactly as public as any other (§9's whole point); it's the *approach* to the next one that's secret.
 
 ---
 
@@ -224,7 +226,8 @@ Recorded so the list survives staff turnover:
 - **Never hide a money term.** Entry fee, field size, prize pool, rake, and break-even are stated before entry, every time.
 - **Never introduce a randomised paid reward.** No loot boxes, no mystery entries, no randomised prize tiers.
 - **Never make a limit easier to lift than to set.** Tightening is immediate; loosening waits out a cooling-off period. Already enforced in schema.
-- **Never raise ranked rake above 1% without republishing break-even in the same release.** The number on the screen and the number in the code ship together or neither ships.
+- **Never raise ranked rake above the published tier rates (10% standard / 5% elite, currently) without republishing break-even in the same release.** The number on the screen and the number in the code ship together or neither ships. Raised 1%→3% in the 2026-07 repricing, then 3%→10% standard / 1.5%→5% elite in the 2026-07-28 repricing (post-tax/processing margin no longer covered by 3%), with this document and the landing/dashboard copy (which derives its numbers from `src/lib/game/fees.ts`, not a hardcoded string) updated in the same change both times.
+- **Never surface Milestone progress publicly.** No dashboard meter, no "$X of $Y," nothing derived from `milestone_progress` rendered to a player before the event fires. See §9.
 
 ---
 

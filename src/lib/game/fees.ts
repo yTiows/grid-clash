@@ -30,12 +30,18 @@ export const FEE_TIERS: Record<FeeTier, FeeTierDefinition> = {
   standard: {
     id: "standard",
     name: "Standard",
-    // 1% — this is the number the brand promises (BRAND.md §3: "we take 1%
-    // where the category takes 15–40%"; break-even 50.51%). It was drifting
-    // out of sync with the code, which still charged 200bps (51.02%
-    // break-even) — exactly the gap this brand's whole positioning is built
-    // to call out in everyone else. Fixed here, not in the copy.
-    bps: 100,
+    // 10% as of the 2026-07-28 repricing (was 3%; BRAND.md §3/§5/§6/§11
+    // updated in the same change — break-even moved from 51.55% to 55.56%,
+    // still under the 60–70% the category's break-even actually runs at).
+    // Raised because 3% no longer covered real operating cost after
+    // processing fees and tax — 10% is the top of the "cash game" rake band
+    // the platform's own research treats as not-yet-predatory (see
+    // CLAUDE_CODE_BRIEF.md §5.1's cited range: cash games 2.5–10%, above
+    // ~15–20% players correctly read it as predatory). Rank-based tiers
+    // exist precisely so this base rate isn't the only rate: it's what a
+    // brand-new account pays, not what a strong, established player settles
+    // into.
+    bps: 1000,
     criteria: ["Everyone starts here"],
     minMatches: 0,
     minDistinctOpponents: 0,
@@ -45,7 +51,10 @@ export const FEE_TIERS: Record<FeeTier, FeeTierDefinition> = {
   established: {
     id: "established",
     name: "Established",
-    bps: 85,
+    // Modest discount, matching the old tier's shape (small step here, the
+    // real drop reserved for elite) rather than splitting the 1000->500
+    // range evenly.
+    bps: 900,
     criteria: [
       "100 completed matches",
       "50 distinct opponents",
@@ -60,7 +69,9 @@ export const FEE_TIERS: Record<FeeTier, FeeTierDefinition> = {
   elite: {
     id: "elite",
     name: "Elite",
-    bps: 60,
+    // 5% — half the standard rate, same ratio as the pre-repricing 1.5%/3%
+    // pair. This is the number the top-tier marketing claim is built on.
+    bps: 500,
     criteria: [
       "500 completed matches",
       "150 distinct opponents",
@@ -75,6 +86,18 @@ export const FEE_TIERS: Record<FeeTier, FeeTierDefinition> = {
   },
 }
 
+/**
+ * The $1 stake is a deliberate loss-leading on-ramp, not a normal
+ * percentage-rate stake: 3% of a $2 pot is 6 cents, too small to cover
+ * processing/operational overhead on its own, and a fee that small reads as
+ * "free" rather than "cheap." A flat quarter keeps the entry tier honest
+ * about costing something while staying obviously the cheapest way to try
+ * ranked for real. It does not scale down by fee tier — it's a floor, not a
+ * rate, so a tier discount has nothing to apply to.
+ */
+export const MINIMUM_STAKE_CENTS = 100
+export const MINIMUM_STAKE_FLAT_FEE_CENTS = 25
+
 export interface MatchFee {
   tier: FeeTier
   bps: number
@@ -83,18 +106,37 @@ export interface MatchFee {
   rawFeeCents: number
   feeCents: number
   capped: boolean
+  /** True for the $1 minimum-stake flat fee — feeCents did not come from bps. */
+  isFlatFee: boolean
   winnerPayoutCents: number
-  /** Realised rate after the cap. Falls below `bps` on large pots. */
+  /** Realised rate after the cap (or, for the flat fee, its equivalent rate). */
   effectiveBps: number
 }
 
 /**
  * Fee is floored so any rounding remainder lands in the payout rather than in
- * the platform's cut.
+ * the platform's cut. The $1 stake is the one exception — see
+ * MINIMUM_STAKE_FLAT_FEE_CENTS — where the fee is a fixed amount, not a rate.
  */
 export function calculateMatchFee(entryFeeCents: number, tier: FeeTier = "standard"): MatchFee {
   const { bps } = FEE_TIERS[tier]
   const potCents = entryFeeCents * 2
+
+  if (entryFeeCents === MINIMUM_STAKE_CENTS) {
+    const feeCents = Math.min(MINIMUM_STAKE_FLAT_FEE_CENTS, potCents)
+    return {
+      tier,
+      bps,
+      potCents,
+      rawFeeCents: feeCents,
+      feeCents,
+      capped: false,
+      isFlatFee: true,
+      winnerPayoutCents: potCents - feeCents,
+      effectiveBps: Math.round((feeCents / potCents) * 10_000),
+    }
+  }
+
   const rawFeeCents = Math.floor((potCents * bps) / 10_000)
   const feeCents = Math.min(rawFeeCents, FEE_CAP_CENTS)
 
@@ -105,6 +147,7 @@ export function calculateMatchFee(entryFeeCents: number, tier: FeeTier = "standa
     rawFeeCents,
     feeCents,
     capped: rawFeeCents > FEE_CAP_CENTS,
+    isFlatFee: false,
     winnerPayoutCents: potCents - feeCents,
     effectiveBps: Math.round((feeCents / potCents) * 10_000),
   }
@@ -120,8 +163,8 @@ export function capBindsAtPotCents(tier: FeeTier = "standard"): number {
  * break-even is p = E / W.
  *
  * Printed next to the stake selector, per tier. It is the single most
- * decision-relevant number on the page: at the standard 1% rate it is
- * 50.51%, which a strong player clears. The whole product premise depends on
+ * decision-relevant number on the page: at the standard 10% rate it is
+ * 55.56%, which a strong player clears. The whole product premise depends on
  * this staying true, so it is displayed rather than derivable.
  */
 export function breakEvenWinRate(entryFeeCents: number, tier: FeeTier = "standard"): number {
@@ -334,11 +377,13 @@ export const CONTEST_FEE_BPS: Record<ContestKind, number> = {
   // Dead weight in practice — the real ranked path reads FEE_TIERS via
   // calculateMatchFee(), never this. Kept in sync anyway so no one reading
   // this table sees a second, disagreeing number for what ranked charges.
-  ranked: 100,
+  ranked: 1000,
   // Tournament economics are deliberately their own thing, not a copy of
-  // ranked's 1% — an entry buys bracket structure, seat guarantees, and a
-  // concentrated prize, not a single match. Untouched by the ranked fix.
-  tournament_standard: 1000,
+  // ranked's rate — an entry buys bracket structure, seat guarantees, and a
+  // concentrated prize, not a single match. This default is a fallback only:
+  // every FORMATS entry (formats.ts) sets its own rakeBps, which is what
+  // actually prices the contest card.
+  tournament_standard: 1400,
   tournament_dollar: 0,
   tournament_milestone: -100,
 }
@@ -445,8 +490,14 @@ export const ELO_MAX = 3200
  * a player who wants to put more than $20 into a single contest now has no
  * ranked option and must go to a tournament to do it. Revisit only alongside
  * an actual pricing review, not as a follow-up code change.
+ *
+ * $1 added in the 2026-07 repricing as the true minimum-friction on-ramp —
+ * see MINIMUM_STAKE_CENTS/MINIMUM_STAKE_FLAT_FEE_CENTS for why it charges a
+ * flat fee instead of the tier rate. It sits below newAccountStakeCeilingCents'
+ * lowest ceiling ($2), so it's selectable from a brand-new account's very
+ * first queue.
  */
-export const RANKED_STAKE_TIERS_CENTS = [500, 2000] as const
+export const RANKED_STAKE_TIERS_CENTS = [100, 500, 2000] as const
 export type RankedStakeCents = (typeof RANKED_STAKE_TIERS_CENTS)[number]
 
 /**

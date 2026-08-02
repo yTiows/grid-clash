@@ -26,25 +26,25 @@ export default function TournamentPlayPage() {
   }, [tournamentMatchId])
 
   return (
-    <div className="halftone relative min-h-screen">
+    <div className="relative min-h-screen">
       <div className="container relative flex min-h-screen flex-col items-center justify-center py-12">
         <div className="w-full max-w-md">
           {(state.phase === "connecting" || state.phase === "tournament_waiting") && (
-            <div className="sticker space-y-4 p-8 text-center">
+            <div className="panel space-y-4 p-8 text-center">
               <div className="display text-2xl text-primary">
                 {state.phase === "connecting" ? "Connecting…" : "Waiting for your opponent"}
               </div>
               <p className="text-sm text-muted-foreground">
                 The match starts the moment they&apos;re here too.
               </p>
-              <div className="mx-auto h-2 w-32 overflow-hidden rounded-full border border-ink bg-black/30">
+              <div className="mx-auto h-2 w-32 overflow-hidden rounded-full border border-border bg-black/30">
                 <div className="h-full w-1/3 animate-pulse bg-primary" />
               </div>
             </div>
           )}
 
           {(state.phase === "matched" || state.phase === "disconnected") && state.gameState && (
-            <div className="sticker space-y-4 p-5">
+            <div className="panel space-y-4 p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-xs text-muted-foreground">Opponent</div>
@@ -95,7 +95,7 @@ export default function TournamentPlayPage() {
           )}
 
           {state.phase === "error" && (
-            <div className="sticker space-y-4 p-8 text-center">
+            <div className="panel space-y-4 p-8 text-center">
               <p className="text-rival">{state.errorMessage}</p>
               <Button onClick={() => router.push("/dashboard/tournaments")}>Back to tournaments</Button>
             </div>

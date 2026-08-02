@@ -36,7 +36,7 @@ export default async function AdminDisputesPage() {
             <p className="text-sm text-muted-foreground">No open disputes.</p>
           ) : (
             disputes.map((dispute) => (
-              <div key={dispute.id} className="space-y-3 border-b border-white/10 py-4 last:border-0">
+              <div key={dispute.id} className="space-y-3 border-b border-white/15 py-4 last:border-0">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="font-bold">

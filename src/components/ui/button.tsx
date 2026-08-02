@@ -6,27 +6,30 @@ import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Every variant shares one press language: a 1px border (or none), no
+ * offset shadow, a small lift on hover and a crisp scale-down on :active.
+ * It should feel like pressing a real key with a bit of spring under it,
+ * not like a sticker peeling off the page.
+ */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-bold uppercase tracking-wide transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[transform,background-color,border-color,opacity] duration-150 ease-[var(--ease-bounce)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40 disabled:hover:translate-y-0 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default:
-          "border-2 border-ink bg-primary text-primary-foreground shadow-[4px_4px_0_0_var(--ink)] hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_var(--ink)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-[1px_1px_0_0_var(--ink)]",
-        rival:
-          "border-2 border-ink bg-rival text-rival-foreground shadow-[4px_4px_0_0_var(--ink)] hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_var(--ink)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-[1px_1px_0_0_var(--ink)]",
-        gold: "border-2 border-ink bg-gold text-gold-foreground shadow-[4px_4px_0_0_var(--ink)] hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_var(--ink)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-[1px_1px_0_0_var(--ink)]",
-        destructive:
-          "border-2 border-ink bg-destructive text-destructive-foreground shadow-[4px_4px_0_0_var(--ink)] hover:-translate-x-0.5 hover:-translate-y-0.5",
+        default: "bg-primary text-primary-foreground hover:-translate-y-0.5 hover:bg-primary/90",
+        rival: "bg-rival text-rival-foreground hover:-translate-y-0.5 hover:bg-rival/90",
+        gold: "bg-gold text-gold-foreground hover:-translate-y-0.5 hover:bg-gold/90",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline:
-          "border-2 border-white/20 bg-transparent text-foreground hover:border-white/40 hover:bg-white/5",
-        ghost: "text-foreground hover:bg-white/5",
-        link: "text-primary underline-offset-4 hover:underline normal-case font-medium",
+          "border border-border bg-transparent text-foreground hover:border-border-strong hover:bg-white/[0.08]",
+        ghost: "text-foreground hover:bg-white/[0.08]",
+        link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-10 px-5 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-14 rounded-lg px-8 text-base",
+        default: "h-10 px-4",
+        sm: "h-8 rounded px-3 text-xs",
+        lg: "h-12 px-6 text-[0.9375rem]",
         icon: "h-10 w-10",
       },
     },

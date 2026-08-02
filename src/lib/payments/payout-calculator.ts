@@ -1,6 +1,18 @@
 /**
  * Payout Calculator
  *
+ * STATUS — dead code. Nothing in src/ imports calculatePayouts,
+ * verifyPayoutRecord, or formatPayouts; the real settlement path is
+ * calculateMatchFee in src/lib/game/fees.ts. This file's DEFAULT_CONFIG
+ * still says 1%, which has been stale since the 2026-07 fee increase (see
+ * fees.ts's FEE_TIERS — standard is now 3%, elite 1.5%). Left in place
+ * rather than deleted only because nothing references it either way; do NOT
+ * wire this up as-is, and do not "fix" its 1% without also confirming
+ * fees.ts and this file are meant to be the same calculation — they compute
+ * fee differently (bps-of-pot with a per-match cap here has no cap at all)
+ * and duplicating the model is exactly how the two disagreeing-fee bugs
+ * documented in fees.ts happened before.
+ *
  * Ensures 100% money conservation:
  * entry_fee_p1 + entry_fee_p2 = winner_payout + loser_payout + house_rake
  *

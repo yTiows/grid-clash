@@ -1,13 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState, useTransition } from "react"
 import { useFormState, useFormStatus } from "react-dom"
 
 import { createTournamentAction, type AdminActionState } from "@/actions/admin-tournaments"
+import { suggestFieldSizeAction, type SizingSuggestion } from "@/actions/admin-tournament-sizing"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { FORMATS } from "@/lib/game/formats"
+import { FORMATS, type FormatId } from "@/lib/game/formats"
 import { RULESETS } from "@/lib/game/rulesets"
 
 const initial: AdminActionState = { status: "idle", message: null }
@@ -29,9 +30,23 @@ export function CreateTournamentForm({
 }) {
   const [state, formAction] = useFormState(createTournamentAction, initial)
   const [formatId, setFormatId] = useState("single_elimination")
+  const fieldSizeRef = useRef<HTMLInputElement>(null)
+  const [sizing, setSizing] = useState<SizingSuggestion | null>(null)
+  const [suggesting, startSuggesting] = useTransition()
 
   const format = FORMATS[formatId as keyof typeof FORMATS]
   const isSatellite = formatId === "satellite"
+
+  function handleSuggest() {
+    setSizing(null)
+    startSuggesting(async () => {
+      const result = await suggestFieldSizeAction(formatId as FormatId)
+      if (result) {
+        setSizing(result)
+        if (fieldSizeRef.current) fieldSizeRef.current.value = String(result.suggestedFieldSize)
+      }
+    })
+  }
 
   return (
     <form action={formAction} className="space-y-4">
@@ -48,7 +63,7 @@ export function CreateTournamentForm({
             name="formatId"
             value={formatId}
             onChange={(e) => setFormatId(e.target.value)}
-            className="flex h-11 w-full rounded-md border-2 border-white/15 bg-black/20 px-3 text-sm"
+            className="flex h-10 w-full rounded-md border border-border bg-white/[0.06] px-3 text-sm"
           >
             {Object.values(FORMATS).map((f) => (
               <option key={f.id} value={f.id}>
@@ -65,13 +80,20 @@ export function CreateTournamentForm({
             id="rulesetId"
             name="rulesetId"
             defaultValue="classic"
-            className="flex h-11 w-full rounded-md border-2 border-white/15 bg-black/20 px-3 text-sm"
+            className="flex h-10 w-full rounded-md border border-border bg-white/[0.06] px-3 text-sm"
           >
-            {Object.values(RULESETS).map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
+            {Object.values(RULESETS)
+              // Purist has no specials and no hidden information on a small
+              // enough board to be solved outright — createTournamentAction
+              // rejects it server-side since every tournament here is real
+              // money; left out of the picklist too so there's nothing to
+              // pick in the first place.
+              .filter((r) => r.id !== "purist")
+              .map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
           </select>
         </div>
       </div>
@@ -90,15 +112,28 @@ export function CreateTournamentForm({
               </span>
             )}
           </Label>
-          <Input
-            id="fieldSize"
-            name="fieldSize"
-            type="number"
-            min={format?.minField ?? 2}
-            max={format?.maxField ?? 256}
-            placeholder="32"
-            required
-          />
+          <div className="flex gap-2">
+            <Input
+              ref={fieldSizeRef}
+              id="fieldSize"
+              name="fieldSize"
+              type="number"
+              min={format?.minField ?? 2}
+              max={format?.maxField ?? 256}
+              placeholder="32"
+              required
+            />
+            <Button type="button" variant="outline" size="sm" disabled={suggesting} onClick={handleSuggest}>
+              {suggesting ? "…" : "Suggest"}
+            </Button>
+          </div>
+          {sizing && (
+            <p className="tabular text-xs text-muted-foreground">
+              {sizing.demand.concurrentPlayers} active last 30m ·{" "}
+              {Math.round(sizing.demand.historicalFillRate * 100)}% recent fill rate → suggesting{" "}
+              {sizing.suggestedFieldSize} seats
+            </p>
+          )}
         </div>
       </div>
 
@@ -119,7 +154,7 @@ export function CreateTournamentForm({
                 id="satelliteTargetTournamentId"
                 name="satelliteTargetTournamentId"
                 required
-                className="flex h-11 w-full rounded-md border-2 border-white/15 bg-black/20 px-3 text-sm"
+                className="flex h-10 w-full rounded-md border border-border bg-white/[0.06] px-3 text-sm"
               >
                 {satelliteTargets.map((t) => (
                   <option key={t.id} value={t.id}>

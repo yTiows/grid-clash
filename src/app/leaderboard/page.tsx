@@ -28,10 +28,15 @@ const TRUST_BADGE_VARIANT: Record<string, "default" | "outline" | "muted" | "riv
 const TITLE_TIER_MARK: Record<string, string> = {
   dollar: "border-white/25 text-muted-foreground",
   bronze: "border-accent text-accent",
-  silver: "border-violet text-violet",
+  // Silver as a neutral metal rather than a hue — the design system deliberately
+  // has only two decorative colors (primary, accent) plus the reserved ones
+  // (gold for money, rival for the board), so this tier earns its distinction
+  // from brightness, not from a fifth color.
+  silver: "border-white/60 text-foreground",
   gold: "border-primary text-primary font-black",
-  obsidian: "border-ink bg-ink text-foreground",
-  milestone: "border-ink bg-gradient-to-r from-primary via-accent to-violet text-ink font-black",
+  obsidian: "border-border bg-background text-foreground",
+  // Light gradient fill needs dark text for contrast, not text-foreground.
+  milestone: "border-border bg-gradient-to-r from-primary to-accent text-background font-black",
 }
 
 export default async function LeaderboardPage() {
@@ -43,7 +48,7 @@ export default async function LeaderboardPage() {
   const { data: rows } = await supabase.from("leaderboard").select("*").order("rank").limit(100)
 
   return (
-    <div className="halftone relative min-h-screen">
+    <div className="relative min-h-screen">
       <div className="container relative space-y-6 py-8">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -74,7 +79,7 @@ export default async function LeaderboardPage() {
             <CardContent className="overflow-x-auto p-0">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b-2 border-ink text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr className="border-b-2 border-border-strong text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <th className="py-3 pl-6 pr-2 font-bold">Rank</th>
                     <th className="px-2 py-3 font-bold">Player</th>
                     <th className="px-2 py-3 text-right font-bold">Elo</th>
@@ -97,7 +102,7 @@ export default async function LeaderboardPage() {
                     return (
                       <tr
                         key={row.id ?? `${row.username}-${row.rank}`}
-                        className={cn("border-b border-white/10", isMe && "bg-primary/10")}
+                        className={cn("border-b border-white/15", isMe && "bg-primary/10")}
                       >
                         <td
                           className={cn(

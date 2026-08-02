@@ -6,15 +6,15 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-full border-2 border-ink px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide",
+  "inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground",
-        gold: "foil",
-        rival: "bg-rival text-rival-foreground",
-        outline: "border-white/20 bg-transparent text-foreground",
-        muted: "border-white/10 bg-secondary text-muted-foreground",
+        default: "border-transparent bg-primary text-primary-foreground",
+        gold: "border-transparent bg-gold/15 text-gold",
+        rival: "border-transparent bg-rival text-rival-foreground",
+        outline: "border-border text-foreground",
+        muted: "border-transparent bg-secondary text-muted-foreground",
       },
     },
     defaultVariants: { variant: "default" },

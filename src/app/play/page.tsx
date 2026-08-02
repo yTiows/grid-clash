@@ -1,30 +1,61 @@
 "use client"
 
-import { Suspense, useEffect } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 
+import { CoinFlip } from "@/components/game/coin-flip"
 import { GameBoard } from "@/components/game/board"
 import { MatchResultCard } from "@/components/game/match-result"
+import { StartCountdown } from "@/components/game/start-countdown"
 import { Button } from "@/components/ui/button"
 import { formatCents } from "@/lib/game/fees"
+import { MATCH_START_GRACE_MS, RANKED_RULESET_IDS, type RankedRulesetId } from "@/lib/game/protocol"
 import { useMatchSocket } from "@/lib/game/use-match-socket"
+
+function isRankedRulesetId(value: string | null): value is RankedRulesetId {
+  return (RANKED_RULESET_IDS as readonly string[]).includes(value ?? "")
+}
 
 function PlayPageInner() {
   const router = useRouter()
   const params = useSearchParams()
   const stakeCents = Number(params.get("stake") ?? 0)
+  const formatParam = params.get("format")
+  const rulesetId: RankedRulesetId = isRankedRulesetId(formatParam) ? formatParam : "classic"
 
   const { state, connect, leaveQueue, submitMove, resign, disconnect } = useMatchSocket()
+  const [ritualDismissedFor, setRitualDismissedFor] = useState<string | null>(null)
+  const showRitual =
+    state.phase === "matched" &&
+    !!state.matchId &&
+    !!state.gameState &&
+    state.gameState.moveNumber === 0 &&
+    !state.suddenDeath &&
+    ritualDismissedFor !== state.matchId
+
+  // The beat after the coin flip and before the board goes interactive —
+  // durationMs matches match-server.ts's MATCH_START_GRACE_MS, which is
+  // already baked into turnDeadline for this first move, so the visible
+  // countdown and the real clock run out together.
+  const [countdownDoneFor, setCountdownDoneFor] = useState<string | null>(null)
+  const showCountdown =
+    state.phase === "matched" &&
+    !!state.matchId &&
+    !!state.gameState &&
+    state.gameState.moveNumber === 0 &&
+    !state.suddenDeath &&
+    ritualDismissedFor === state.matchId &&
+    countdownDoneFor !== state.matchId
 
   useEffect(() => {
     if (stakeCents > 0 && state.phase === "idle") {
-      void connect(stakeCents)
+      void connect(stakeCents, rulesetId)
     }
     return () => {
       disconnect()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stakeCents])
+  }, [stakeCents, rulesetId])
 
   if (!stakeCents) {
     return (
@@ -38,11 +69,11 @@ function PlayPageInner() {
   }
 
   return (
-    <div className="halftone relative min-h-screen">
+    <div className="relative min-h-screen">
       <div className="container relative flex min-h-screen flex-col items-center justify-center py-12">
         <div className="w-full max-w-md">
           {(state.phase === "connecting" || state.phase === "queued") && (
-            <div className="sticker space-y-4 p-8 text-center">
+            <div className="panel space-y-4 p-8 text-center">
               <div className="display text-2xl text-primary">
                 {state.phase === "connecting" ? "Connecting…" : "Finding an opponent"}
               </div>
@@ -50,7 +81,7 @@ function PlayPageInner() {
                 Stake {formatCents(stakeCents)}
                 {state.queuePosition ? ` · position ${state.queuePosition}` : ""}
               </p>
-              <div className="mx-auto h-2 w-32 overflow-hidden rounded-full border border-ink bg-black/30">
+              <div className="mx-auto h-2 w-32 overflow-hidden rounded-full border border-border bg-black/30">
                 <div className="h-full w-1/3 animate-pulse bg-primary" />
               </div>
               <Button
@@ -65,8 +96,20 @@ function PlayPageInner() {
             </div>
           )}
 
-          {(state.phase === "matched" || state.phase === "disconnected") && state.gameState && (
-            <div className="sticker space-y-4 p-5">
+          {(state.phase === "matched" || state.phase === "disconnected") &&
+            state.gameState &&
+            (showRitual ? (
+              <CoinFlip
+                youFirst={state.gameState.turn === state.gameState.you}
+                onDone={() => setRitualDismissedFor(state.matchId)}
+              />
+            ) : showCountdown ? (
+              <StartCountdown
+                durationMs={MATCH_START_GRACE_MS}
+                onDone={() => setCountdownDoneFor(state.matchId)}
+              />
+            ) : (
+              <div className="panel space-y-4 p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-xs text-muted-foreground">Opponent</div>
@@ -77,6 +120,12 @@ function PlayPageInner() {
                   <div className="tabular font-bold">{state.opponent?.eloRating}</div>
                 </div>
               </div>
+
+              {state.suddenDeath && (
+                <div className="rounded-md border border-accent bg-accent/10 p-2 text-center text-xs font-medium text-accent">
+                  Board filled with no line — sudden death. Fresh board, same stake.
+                </div>
+              )}
 
               {state.opponentDisconnected && (
                 <div className="rounded-md border-2 border-gold bg-gold/10 p-2 text-center text-xs font-bold text-gold">
@@ -109,19 +158,19 @@ function PlayPageInner() {
               >
                 Resign
               </Button>
-            </div>
-          )}
+              </div>
+            ))}
 
           {state.phase === "over" && state.result && (
             <MatchResultCard
               result={state.result}
               matchId={state.matchId ?? undefined}
-              onPlayAgain={() => void connect(stakeCents)}
+              onPlayAgain={() => void connect(stakeCents, rulesetId)}
             />
           )}
 
           {state.phase === "error" && (
-            <div className="sticker space-y-4 p-8 text-center">
+            <div className="panel space-y-4 p-8 text-center">
               <p className="text-rival">{state.errorMessage}</p>
               <Button onClick={() => router.push("/dashboard")}>Back to lobby</Button>
             </div>

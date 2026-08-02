@@ -29,6 +29,11 @@ export function PhoneVerifyForm() {
   }
 
   const codeSent = sendState.status === "sent"
+  // sendPhoneCodeAction accepts however the player typed it (spaces,
+  // dashes, no country code) and normalizes to E.164 server-side — this
+  // syncs the client's copy to that normalized value so the verify step's
+  // hidden field matches what was actually texted, not what was typed.
+  const verifiedPhone = sendState.normalizedPhone ?? phone
 
   return (
     <div className="space-y-3">
@@ -36,7 +41,8 @@ export function PhoneVerifyForm() {
         <form action={sendAction} className="flex gap-2">
           <Input
             name="phoneNumber"
-            placeholder="+15551234567"
+            type="tel"
+            placeholder="(555) 123-4567"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             className="flex-1"
@@ -47,7 +53,7 @@ export function PhoneVerifyForm() {
 
       {codeSent && (
         <form action={verifyAction} className="flex gap-2">
-          <input type="hidden" name="phoneNumber" value={phone} />
+          <input type="hidden" name="phoneNumber" value={verifiedPhone} />
           <Input name="code" placeholder="6-digit code" maxLength={6} className="flex-1" />
           <SubmitButton>Verify</SubmitButton>
         </form>

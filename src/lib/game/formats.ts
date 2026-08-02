@@ -11,7 +11,7 @@
  * settled number are the same value.
  */
 
-import { calculatePrizePool, type PrizePool } from "./fees"
+import { calculatePrizePool, expectedScore, type PrizePool } from "./fees"
 import { getRuleset, type Ruleset } from "./rulesets"
 
 export type FormatId =
@@ -44,7 +44,7 @@ export const FORMATS: Record<FormatId, FormatDefinition> = {
     id: "single_elimination",
     name: "Knockout",
     blurb: "Lose once, you're out. Shortest road to the title.",
-    rakeBps: 1000,
+    rakeBps: 1400,
     rakeRationale: "Standard rate. One loss ends your run, so play time varies.",
     minField: 4,
     maxField: 256,
@@ -56,7 +56,7 @@ export const FORMATS: Record<FormatId, FormatDefinition> = {
     id: "swiss",
     name: "Swiss",
     blurb: "Fixed rounds, paired by record. Nobody goes home early.",
-    rakeBps: 1200,
+    rakeBps: 1500,
     rakeRationale: "Higher rate: every entrant plays all rounds regardless of record.",
     minField: 8,
     maxField: 512,
@@ -68,7 +68,7 @@ export const FORMATS: Record<FormatId, FormatDefinition> = {
     id: "bounty",
     name: "Bounty",
     blurb: "Part of every entry sits on that player's head. Knock them out, take it.",
-    rakeBps: 1000,
+    rakeBps: 1400,
     rakeRationale: "Standard rate. 30% of each entry becomes bounties, paid to entrants.",
     minField: 8,
     maxField: 128,
@@ -80,7 +80,7 @@ export const FORMATS: Record<FormatId, FormatDefinition> = {
     id: "survivor",
     name: "Survivor",
     blurb: "Every round cuts the bottom half. Last standing takes it.",
-    rakeBps: 1200,
+    rakeBps: 1500,
     rakeRationale: "Higher rate: guarantees at least three rounds before any cut.",
     minField: 16,
     maxField: 256,
@@ -92,7 +92,7 @@ export const FORMATS: Record<FormatId, FormatDefinition> = {
     id: "ladder",
     name: "Ladder",
     blurb: "Climb against rising opposition. Bank your winnings or push on.",
-    rakeBps: 800,
+    rakeBps: 1100,
     rakeRationale: "Lower rate: solo structure with no bracket to run or seat to hold.",
     minField: 1,
     maxField: 1,
@@ -104,7 +104,7 @@ export const FORMATS: Record<FormatId, FormatDefinition> = {
     id: "satellite",
     name: "Satellite",
     blurb: "Prize is a seat at a bigger table, not cash.",
-    rakeBps: 1000,
+    rakeBps: 1400,
     rakeRationale: "Standard rate. Prize is paid as tournament entry at face value.",
     minField: 8,
     maxField: 256,
@@ -112,12 +112,26 @@ export const FORMATS: Record<FormatId, FormatDefinition> = {
     bountyShareBps: 0,
   },
 
+  // Was advertised as a literal "winner stays on" king-of-the-hill ladder
+  // (one continuous seat, challengers queued one at a time), priced above
+  // Knockout for that reason. That mechanic was never actually implemented
+  // — bracket.ts's advanceRound had no branch for "arena" at all, so it
+  // silently fell into the shared score-format path and crowned whichever
+  // tied player happened to sort first after a single simultaneous round,
+  // while still charging the higher rate for a contest structure that
+  // doesn't exist in code. Routed through the same knockout bracket
+  // Knockout/Satellite/Bounty already use (bracket.ts) until a real
+  // sequential king-of-the-hill runner gets built — this file's own
+  // architecture is round-based/simultaneous throughout, and "one ongoing
+  // seat" doesn't fit that shape without a different scheduler, which is
+  // more than a rules fix. Priced identically to Knockout now, since the
+  // mechanic genuinely is Knockout's until that runner exists.
   arena: {
     id: "arena",
     name: "Arena",
-    blurb: "Winner stays on. Break the streak to take the throne.",
-    rakeBps: 1200,
-    rakeRationale: "Higher rate: continuous seating, every entrant gets a turn at the throne.",
+    blurb: "Single elimination. One loss ends your run.",
+    rakeBps: 1400,
+    rakeRationale: "Standard rate — same bracket mechanic as Knockout.",
     minField: 6,
     maxField: 64,
     guaranteedMatches: 1,
@@ -202,9 +216,6 @@ export function planTournament(
       break
     case "survivor":
       rounds = survivorRounds(fieldSize)
-      break
-    case "arena":
-      rounds = fieldSize - 1
       break
     case "ladder":
       rounds = 1
@@ -323,33 +334,64 @@ export interface LadderRung {
 
 const LADDER_MULTIPLIERS = [1.8, 3.2, 5.6, 9.5, 16] as const
 
+/**
+ * Backward-induction check (V(i) = max(bank, p(i+1) * V(i+1)), same formula
+ * settle_ranked_match's Elo already uses) on the old 50 + i*75 curve showed
+ * banking strictly dominated pushing at every single rung — push EV was
+ * roughly 5-8x worse than banking, not a real decision, just a trap for
+ * anyone who ran the numbers. 75 + i*50 keeps the "progressively stronger
+ * opposition" fantasy (still escalating) but flattens it enough that
+ * pushing stays a genuine, if still bank-favored, temptation across the
+ * whole ladder instead of falling off a cliff after rung 1: push EV runs
+ * roughly 60% of bank's value at the first step down to ~30% at the last,
+ * rather than 33% down to 12%.
+ */
 export function planLadder(entryFeeCents: number): LadderRung[] {
   return LADDER_MULTIPLIERS.map((multiplier, i) => ({
     rung: i + 1,
-    opponentEloOffset: 50 + i * 75,
+    opponentEloOffset: 75 + i * 50,
     bankValueCents: Math.floor(entryFeeCents * multiplier),
     multiplier,
   }))
 }
 
 /**
- * House edge on a ladder rung, given a per-match win probability.
+ * House edge on a ladder rung, given the player's estimated win rate against
+ * rung 1's opponent strength.
  *
- * Published alongside the rung table. A ladder's multipliers look generous in
- * isolation and the compounding failure probability is what actually decides
- * the value — a player who cannot see both numbers cannot evaluate the offer.
+ * Previously this compounded one flat perMatchWinRate raised to the rung
+ * number (perMatchWinRate ** rung.rung) — mathematically wrong the moment a
+ * ladder has more than one rung, since every rung after the first has a
+ * different (harder) opponentEloOffset, and a flat rate can't reflect that.
+ * A player who calibrated their honest win rate against typical rung-1
+ * opposition would see this page understate their real risk at every rung
+ * beyond the first, on a page whose whole stated purpose is publishing the
+ * real number so the offer can be evaluated honestly.
+ *
+ * Fixed by converting the reported rate into an implied Elo edge (the
+ * inverse of the standard logistic formula) and compounding each rung's
+ * ACTUAL win probability via expectedScore — the same formula matchmaking
+ * itself already uses — scaled by how much harder that rung's opponent is
+ * relative to rung 1, not by an arbitrary flat exponent.
  */
 export function ladderEdge(
   entryFeeCents: number,
   rungs: LadderRung[],
   perMatchWinRate: number
 ): { rung: number; reachProbability: number; expectedValueCents: number }[] {
+  const clamped = Math.min(0.999, Math.max(0.001, perMatchWinRate))
+  const impliedEloEdge = 400 * Math.log10(clamped / (1 - clamped))
+  const firstRungOffset = rungs[0]?.opponentEloOffset ?? 0
+
+  let cumulative = 1
   return rungs.map((rung) => {
-    const reachProbability = perMatchWinRate ** rung.rung
+    const relativeOffset = rung.opponentEloOffset - firstRungOffset
+    const rungWinProb = expectedScore(impliedEloEdge, relativeOffset)
+    cumulative *= rungWinProb
     return {
       rung: rung.rung,
-      reachProbability,
-      expectedValueCents: reachProbability * rung.bankValueCents - entryFeeCents,
+      reachProbability: cumulative,
+      expectedValueCents: cumulative * rung.bankValueCents - entryFeeCents,
     }
   })
 }

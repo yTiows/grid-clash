@@ -46,7 +46,7 @@ export default async function AdminFraudPage() {
                 {bySeverity.get(severity)!.map((flag) => (
                   <div
                     key={flag.id}
-                    className="flex items-start justify-between gap-4 border-b border-white/10 py-3 last:border-0"
+                    className="flex items-start justify-between gap-4 border-b border-white/15 py-3 last:border-0"
                   >
                     <div>
                       <div className="font-bold">{flag.username}</div>

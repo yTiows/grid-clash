@@ -9,7 +9,7 @@
  * disprove.
  */
 
-import { FORMATS, type FormatId } from "./formats"
+import { FORMATS, swissRounds, type FormatId } from "./formats"
 
 // --- Deterministic RNG ------------------------------------------------------
 
@@ -234,8 +234,31 @@ export function pairSwissRound(
     }
   }
 
-  // Odd field: the lowest-scoring player without a prior bye gets it.
-  const unpaired = sorted.filter((id) => !paired.has(id))
+  // Odd field: the lowest-scoring player without a prior bye gets it. The
+  // pairing loop above always leaves the single lowest-scored player
+  // unpaired, with no regard for whether they already had a bye —
+  // selectByeRecipient below implements the real "no second bye" rule but
+  // was never actually wired into this path, so a repeat bottom-of-the-
+  // standings player could draw two or more free-win byes across an event.
+  // If the natural odd-one-out already had a bye, swap them into the
+  // lowest-scored zero-bye player's pairing instead (a rematch, same
+  // tradeoff already accepted above rather than leaving someone idle) and
+  // give the actual bye to the zero-bye player.
+  let unpaired = sorted.filter((id) => !paired.has(id))
+  if (unpaired.length === 1 && (byId.get(unpaired[0]!)?.byes ?? 0) > 0) {
+    const oddOut = unpaired[0]!
+    const swapCandidate = sorted.find(
+      (id) => paired.has(id) && id !== oddOut && (byId.get(id)?.byes ?? 0) === 0
+    )
+    const swapPairing = swapCandidate
+      ? pairings.find((p) => !p.isBye && (p.player1 === swapCandidate || p.player2 === swapCandidate))
+      : undefined
+    if (swapCandidate && swapPairing) {
+      if (swapPairing.player1 === swapCandidate) swapPairing.player1 = oddOut
+      else swapPairing.player2 = oddOut
+      unpaired = [swapCandidate]
+    }
+  }
   for (const id of unpaired) {
     pairings.push({ boardPosition: board++, player1: id, player2: null, isBye: true })
   }
@@ -353,12 +376,19 @@ export function advanceRound(
 
   let updated = next
 
-  if (formatId === "single_elimination" || formatId === "satellite" || formatId === "bounty") {
+  if (formatId === "single_elimination" || formatId === "satellite" || formatId === "bounty" || formatId === "arena") {
     // One loss ends the run. Bounty is structurally a knockout with a side
     // payment on elimination (see record_tournament_match_result's bounty
     // claim) — the bracket shape itself is identical to single_elimination.
+    // Arena is routed here too — see the note on planRound's pairing
+    // dispatcher below for why "winner stays on" isn't actually implemented.
     updated = next.map((s) => (s.losses > 0 ? { ...s, eliminated: true } : s))
-  } else if (formatId === "survivor") {
+  } else if (formatId === "survivor" && roundNumber >= 3) {
+    // formats.ts's own rakeRationale for Survivor is "guarantees at least
+    // three rounds before any cut" — that's the entire justification for
+    // its rake sitting above Knockout's. This used to cut the bottom half
+    // after every round unconditionally, including round 1, contradicting
+    // the guarantee the higher rate is priced on.
     updated = applySurvivorCut(next)
   }
 
@@ -372,13 +402,27 @@ export function advanceRound(
     formatId === "single_elimination" ||
     formatId === "satellite" ||
     formatId === "survivor" ||
-    formatId === "bounty"
+    formatId === "bounty" ||
+    formatId === "arena"
   ) {
     complete = active.length <= 1
     champion = complete ? (active[0] ?? null) : null
   } else {
-    // Score formats run a fixed number of rounds.
-    complete = roundNumber >= Math.max(totalRounds, 1)
+    // Score formats run a number of rounds. Swiss's is field-size-
+    // dependent (swissRounds — 3 rounds at an 8-player field, up to 9 at
+    // 512) because that's what planTournament (formats.ts) already
+    // computed and priced the contest card's higher rake on ("every
+    // entrant plays all rounds regardless of record"). The static
+    // FORMATS[formatId].guaranteedMatches=5 default below used to be the
+    // only number read here, so anything outside roughly a 17-32 player
+    // field ran a different tournament than the one it was sold as: a
+    // small field played extra unplanned rounds, a large field got cut
+    // off early with dozens of players tied at a perfect record, deciding
+    // the "champion" by tiebreak instead of the rounds that were supposed
+    // to separate them. Standings never shrink for Swiss (nobody's
+    // eliminated), so standings.length is the field size at any round.
+    const roundsForFormat = formatId === "swiss" ? swissRounds(standings.length) : totalRounds
+    complete = roundNumber >= Math.max(roundsForFormat, 1)
     if (complete) {
       const ranked = [...updated].sort((a, b) => {
         const sa = a.wins * 2 + a.draws
@@ -391,6 +435,37 @@ export function advanceRound(
   }
 
   return { standings: updated, active, complete, champion }
+}
+
+/**
+ * Recomputes opponentWinSum from each opponent's FINAL win total, not the
+ * incremental snapshot advanceRound accumulates round by round above (which
+ * credits an opponent's win count as of the moment they were played, e.g. 1
+ * if faced right after their round-1 win, 2 if faced right after round 2 —
+ * even for the exact same opponent finishing the event with an identical
+ * final record). A standard Buchholz tiebreak sums opponents' FINAL scores
+ * specifically so two players who faced equivalent opposition get
+ * equivalent credit regardless of which round they happened to play them
+ * in; the incremental version instead rewards facing an opponent before
+ * they get hot.
+ *
+ * Call this once, after the last round, before finalPlacings() — it decides
+ * real-money payout order, so it needs the correct number. advanceRound's
+ * running total is left as-is for mid-event display, where there's no
+ * "final" opponent score to sum yet anyway.
+ */
+export function finalOpponentWinSums(
+  standings: StandingRow[],
+  previousOpponents: Map<string, Set<string>>
+): StandingRow[] {
+  const winsById = new Map(standings.map((s) => [s.userId, s.wins]))
+  return standings.map((s) => {
+    const faced = previousOpponents.get(s.userId)
+    if (!faced) return s
+    let sum = 0
+    for (const opponentId of faced) sum += winsById.get(opponentId) ?? 0
+    return { ...s, opponentWinSum: sum }
+  })
 }
 
 /** Final placings, best first. */
@@ -415,8 +490,17 @@ export interface RoundPlan {
 
 /**
  * Produces the next round's pairings. Deterministic given contestId, round
- * number, and standings — the RNG is reseeded per round from the contest id,
- * so a replay of round 4 does not depend on having replayed rounds 1 to 3.
+ * number, and the final entrant list — still fully replayable (an
+ * investigator has all three from storage), but no longer precomputable
+ * before registration closes. Seeding from contestId alone let anyone with
+ * influence over contestId (a private event's host-chosen slug, say) brute-
+ * force the ~4 billion 32-bit hash space offline for one that hands
+ * themselves a favorable bye or pairing, then create the event under that
+ * id — the same determinism that makes a bracket auditable after the fact
+ * also made it riggable in advance. Folding in the entrant list closes that
+ * specific hole: nobody knows the full field, and so can't compute this
+ * seed, until registration is closed and pairings are actually about to be
+ * drawn.
  */
 export function planRound(
   contestId: string,
@@ -426,12 +510,35 @@ export function planRound(
   standings: StandingRow[],
   previousOpponents: Map<string, Set<string>>
 ): RoundPlan {
-  const rng = seededRandom(seedFromId(contestId) + roundNumber * 7919)
+  const fieldFingerprint = seedFromId([...entrants].map((e) => e.userId).sort().join(","))
+  const rng = seededRandom((seedFromId(contestId) ^ fieldFingerprint) + roundNumber * 7919)
   const seeded = seedEntrants(entrants).map((e) => e.userId)
   const active = standings.filter((s) => !s.eliminated).map((s) => s.userId)
 
+  /**
+   * Arena is routed through the knockout pairer/eliminator, not a real
+   * "winner stays on" ladder. A literal king-of-the-hill format — one
+   * champion seat, challengers queued one at a time, N-1 total sequential
+   * matches (formats.ts's planTournament already computes fieldSize-1 for
+   * this reason) — is a genuinely different scheduling shape than every
+   * other format here: this whole file is built around simultaneous
+   * per-round pairings (RoundPlan) resolved as a batch, and a single
+   * ongoing seat doesn't fit that shape without a different runner. Before
+   * this fix, "arena" matched neither the knockout list above nor the
+   * active.length<=1 completion check below, so it fell into the shared
+   * "score formats run guaranteedMatches rounds" branch with
+   * guaranteedMatches hardcoded to 1 — a real-money contest that priced
+   * itself as a 1v1 streak-based format but actually paired the whole
+   * field once and crowned whichever tied player happened to sort first.
+   * Knockout is a real, already-correct multi-round bracket that at least
+   * decides a genuine champion through actual play; it doesn't preserve
+   * the literal "break the streak" fantasy (see the arena blurb in
+   * formats.ts, which should be revisited alongside a real sequential
+   * runner if that fantasy still matters more than shipping a working fix
+   * now).
+   */
   const pairings =
-    formatId === "single_elimination" || formatId === "satellite" || formatId === "bounty"
+    formatId === "single_elimination" || formatId === "satellite" || formatId === "bounty" || formatId === "arena"
       ? pairKnockoutRound(active, seeded, standings, rng)
       : pairSwissRound(active, standings, previousOpponents, rng)
 

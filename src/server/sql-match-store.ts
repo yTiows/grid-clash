@@ -30,6 +30,7 @@ import {
   planRound,
   advanceRound,
   finalPlacings,
+  finalOpponentWinSums,
   type Entrant,
   type StandingRow,
   type RoundResult,
@@ -99,7 +100,7 @@ export class SqlMatchStore implements MatchStore {
 
   async settleMatch(
     input: SettlementInput
-  ): Promise<{ eloDeltaWinner: number; eloDeltaLoser: number }> {
+  ): Promise<{ eloDeltaWinner: number; eloDeltaLoser: number; winnerPayoutCents: number }> {
     const { winnerId, loserId, isDraw, stakeCents } = input
 
     const participants = await this.loadParticipants(input)
@@ -164,6 +165,14 @@ export class SqlMatchStore implements MatchStore {
     return {
       eloDeltaWinner: rating.winnerDelta,
       eloDeltaLoser: rating.loserDelta,
+      // Same number already sent to the DB as p_winner_payout_cents above —
+      // the caller (match-server.ts) needs it too, to tell the winner what
+      // they actually just won in the match:over message. Previously not
+      // returned at all, so that message hardcoded payoutCents to 0 for
+      // every ranked match, win or lose — the wallet credit itself was
+      // always correct (the DB got the real number), only the live result
+      // screen was silently wrong.
+      winnerPayoutCents: isDraw ? stakeCents : fee.winnerPayoutCents,
     }
   }
 
@@ -417,7 +426,11 @@ export class SqlMatchStore implements MatchStore {
 
       if (round.id === justCompletedRoundId) {
         if (outcome.complete) {
-          await this.payoutTournament(tournament, standings)
+          // Buchholz-correct opponentWinSum (final opponent scores, not the
+          // as-played snapshot advanceRound accumulates) — this decides
+          // real-money payout order, unlike the running total used for any
+          // mid-event display.
+          await this.payoutTournament(tournament, finalOpponentWinSums(standings, previousOpponents))
         } else {
           await this.createNextRound(tournament, round.round_number + 1, formatId, entrants, standings, previousOpponents)
         }

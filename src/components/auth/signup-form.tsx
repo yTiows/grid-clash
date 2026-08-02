@@ -72,11 +72,12 @@ export function SignupForm() {
           type="checkbox"
           name="acceptedTerms"
           required
-          className="mt-0.5 h-4 w-4 rounded border-2 border-white/20 bg-transparent accent-[color:var(--primary)]"
+          className="mt-0.5 h-4 w-4 rounded border border-border bg-transparent accent-[color:var(--primary)]"
         />
         <span>
           I&apos;m 18+, and I agree matches are for entertainment, not a source of income.
-          Results are determined by skill.
+          Results are determined by skill. Deposit limits and self-exclusion are available on
+          my account at any time, and no purchase is necessary to play.
         </span>
       </label>
       {state.fieldErrors?.acceptedTerms && (

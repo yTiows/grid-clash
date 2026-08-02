@@ -38,14 +38,42 @@ export const RATE_LIMIT = {
 /** A turn is 5s; this is the grace window before a dropped player forfeits. */
 export const RECONNECT_GRACE_MS = 30_000
 
+/**
+ * Extra time folded into a fresh board's very first turnDeadline — match
+ * start and each sudden-death replay (match-server.ts's startMatch,
+ * startTournamentMatch, replayAsSuddenDeath). Without it the clock is
+ * already ticking the instant the coin flip resolves, which leaves no room
+ * to even register who moves first before having to also decide what to
+ * play. Every move after the first keeps the ruleset's plain moveTimeoutMs —
+ * this is a one-time cushion on the reveal, not a permanently longer clock.
+ *
+ * Shared with the client (StartCountdown's durationMs) so the visible
+ * countdown and the real server deadline run out together: the server bakes
+ * this into turnDeadline, the client shows a countdown for exactly this long
+ * before the board goes interactive, and by the time it hits zero the
+ * remaining time on the wire is just the ruleset's normal clock.
+ */
+export const MATCH_START_GRACE_MS = 3_000
+
 export const HEARTBEAT_INTERVAL_MS = 15_000
 export const HEARTBEAT_TIMEOUT_MS = 40_000
 
 // --- Client to server -------------------------------------------------------
 
+/**
+ * Ranked format choice. A closed enum, not an arbitrary rulesets.ts id — not
+ * every format (Siege's 6x6 board, Sprawl's 7x7) is meant to pair with a
+ * quick-queue stake; those stay tournament-only. Extending ranked to a new
+ * format means adding it here deliberately, not automatically inheriting
+ * whatever rulesets.ts grows next.
+ */
+export const RANKED_RULESET_IDS = ["classic", "blitz", "gambit"] as const
+export type RankedRulesetId = (typeof RANKED_RULESET_IDS)[number]
+
 const queueJoin = z.object({
   type: z.literal("queue:join"),
   stakeCents: z.number().int().positive(),
+  rulesetId: z.enum(RANKED_RULESET_IDS).default("classic"),
 })
 
 const queueLeave = z.object({
@@ -83,6 +111,20 @@ const matchResign = z.object({
   matchId: z.string().uuid(),
 })
 
+/**
+ * Read-only. A participant can't spectate their own match (match-server.ts
+ * rejects it) — this is for an outside audience, not a second window into
+ * a match you're playing.
+ */
+const spectateJoin = z.object({
+  type: z.literal("spectate:join"),
+  matchId: z.string().uuid(),
+})
+
+const spectateLeave = z.object({
+  type: z.literal("spectate:leave"),
+})
+
 const heartbeat = z.object({
   type: z.literal("pong"),
 })
@@ -93,6 +135,8 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   tournamentJoin,
   matchMove,
   matchResign,
+  spectateJoin,
+  spectateLeave,
   heartbeat,
 ])
 
@@ -101,7 +145,7 @@ export type MoveMessage = z.infer<typeof matchMove>
 
 // --- Server to client -------------------------------------------------------
 
-import type { RedactedGameState } from "./engine"
+import type { PlayerSlot, RedactedGameState, SpectatorGameState } from "./engine"
 
 export type ServerMessage =
   | { type: "queue:waiting"; position: number; stakeCents: number }
@@ -159,8 +203,21 @@ export type ServerMessage =
       reason: "line" | "resign" | "abandon" | "no_legal_moves"
     }
   | { type: "tournament:sudden_death"; tournamentMatchId: string; state: RedactedGameState; turnDeadline: number }
+  /**
+   * Ranked's equivalent of tournament:sudden_death — a paid match should
+   * still produce exactly one winner, so a natural board-full/no-legal-move
+   * draw replays on a fresh board (same two players, same stake, same
+   * reservations) instead of settling as a draw payout. See match-server.ts
+   * settle().
+   */
+  | { type: "match:sudden_death"; matchId: string; state: RedactedGameState; turnDeadline: number }
   | { type: "match:opponent_disconnected"; matchId: string; graceEndsAt: number }
   | { type: "match:opponent_reconnected"; matchId: string }
+  /** Neutral view — see engine.ts redactStateForSpectator. Sent once on
+   * spectate:join, then on every subsequent state change until the match
+   * ends or the viewer leaves. */
+  | { type: "spectate:state"; matchId: string; state: SpectatorGameState; turnDeadline: number }
+  | { type: "spectate:over"; matchId: string; state: SpectatorGameState; winnerSlot: PlayerSlot | null }
   | { type: "ping" }
   | { type: "error"; code: ErrorCode; message: string }
 
