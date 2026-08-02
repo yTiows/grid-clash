@@ -217,7 +217,9 @@ New Twilio accounts start in **trial mode**, which can only send SMS to phone nu
 cp .env.example .env.local
 ```
 
-Fill in every value from sections 1–3 above, then:
+Fill in every value from sections 1–3 above by hand, **or** run `./scripts/setup-external.sh` first — it's an interactive alternative that prompts for each Supabase/Stripe/Twilio credential, writes them into `.env.local` for you, and smoke-tests all three connections (`curl -sf` against each provider, so a bad key fails loudly instead of printing a false green checkmark). Either path lands you at a filled-in `.env.local`; skip it and edit the file by hand if you prefer.
+
+Then:
 
 ```bash
 ./scripts/setup.sh
@@ -271,7 +273,12 @@ Each `vercel env add` prompts you to paste the value. `vercel link` connects thi
 
 **Manual fallback:** [vercel.com/new](https://vercel.com/new), import the repo, and paste each variable into **Project Settings → Environment Variables** before the first deploy.
 
-**Scheduled job:** `vercel.json` already declares a cron entry that hits `/api/cron/recompute-standing` every 30 minutes — this is what computes Skill Index, trust band, and fee tier for every player (until it runs at least once, everyone shows a blank Skill Index and the `standard` fee tier, and the leaderboard is empty). Vercel reads `vercel.json` automatically on deploy and attaches `Authorization: Bearer $CRON_SECRET` to every invocation itself, as long as `CRON_SECRET` is set on the project — generate one with `openssl rand -hex 32`. No manual cron setup needed beyond setting that one env var.
+**Scheduled jobs:** `vercel.json` declares two cron entries, both gated on the same `CRON_SECRET`:
+
+- `/api/cron/recompute-standing`, every 30 minutes — computes Skill Index, trust band, and fee tier for every player (until it runs at least once, everyone shows a blank Skill Index and the `standard` fee tier, and the leaderboard is empty).
+- `/api/cron/detect-automation`, hourly — scores the last 30 days of ranked play for bot-like behavior (move-timing consistency, session length, active-hours spread) and writes `automation_reviews`. **This one matters even if you don't care about bot detection directly:** `recompute-standing` reads its confirmed resolutions into Skill Index and trust score, so a deployment that only wires up `recompute-standing` is still silently missing an input to it.
+
+Vercel reads `vercel.json` automatically on deploy and attaches `Authorization: Bearer $CRON_SECRET` to every invocation itself, as long as `CRON_SECRET` is set on the project — generate one with `openssl rand -hex 32`. No manual cron setup needed beyond setting that one env var; it covers both entries.
 
 ### 5.2 Match server → Fly.io
 
@@ -319,7 +326,8 @@ Run through this once everything above is live:
 - [ ] Queue for a ranked match from two browser sessions (or two accounts), confirm the WS server pairs them and a match completes
 - [ ] Grant yourself admin (§1.6), then confirm `/admin/tournaments`, `/admin/fraud`, and `/admin/disputes` all load
 - [ ] Manually trigger `/api/cron/recompute-standing` once (`curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://yourdomain.com/api/cron/recompute-standing`) and confirm it returns `{"recomputed": N}` with `N` equal to your active user count, then check `/leaderboard` shows real rows
-- [ ] Confirm the Vercel Cron entry itself fired at least once — **Vercel Dashboard → your project → Cron Jobs** shows recent invocations
+- [ ] Manually trigger `/api/cron/detect-automation` once (same header, `.../api/cron/detect-automation`) and confirm it returns a 200
+- [ ] Confirm both Vercel Cron entries fired at least once — **Vercel Dashboard → your project → Cron Jobs** shows recent invocations for `recompute-standing` and `detect-automation`
 - [ ] Flip Stripe to live mode only after all of the above pass in test mode
 
 ---
