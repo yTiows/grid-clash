@@ -2826,6 +2826,7 @@ export type Database = {
           id: string
           kind: string
           milestone_index: number | null
+          min_player_tier: string
           name: string
           overlay_cents: number
           place_pool_cents: number | null
@@ -2855,6 +2856,7 @@ export type Database = {
           id?: string
           kind: string
           milestone_index?: number | null
+          min_player_tier?: string
           name: string
           overlay_cents?: number
           place_pool_cents?: number | null
@@ -2884,6 +2886,7 @@ export type Database = {
           id?: string
           kind?: string
           milestone_index?: number | null
+          min_player_tier?: string
           name?: string
           overlay_cents?: number
           place_pool_cents?: number | null
@@ -3177,6 +3180,10 @@ export type Database = {
       }
       assert_loyalty_points_mint_works: { Args: never; Returns: string }
       assert_loyalty_redemption_works: { Args: never; Returns: string }
+      assert_rank_tiered_tournament_gating_works: {
+        Args: never
+        Returns: string
+      }
       assert_reference_tables_restored: { Args: never; Returns: string }
       assert_rulesets_seeded: { Args: never; Returns: string }
       assert_satellite_completion_works: { Args: never; Returns: string }

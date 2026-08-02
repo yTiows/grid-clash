@@ -5,7 +5,9 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { FORMATS, planTournament, distributePrizePool, planSatellite, type FormatId } from "@/lib/game/formats"
-import { calculatePrizePool } from "@/lib/game/fees"
+import { calculatePrizePool, FEE_TIERS, type FeeTier } from "@/lib/game/fees"
+
+const VALID_PLAYER_TIERS = Object.keys(FEE_TIERS) as FeeTier[]
 
 export type AdminActionState = {
   status: "idle" | "error" | "success"
@@ -69,6 +71,15 @@ export async function createTournamentAction(
   if (demandSized && !startsAt) {
     return { status: "error", message: "Demand-sized contests need a start time — that's when the field commits." }
   }
+  // Rank-gated tournament tier (Phase 2 economy rebuild, CLAUDE_CODE_BRIEF.md
+  // §5): gates entry to players whose player_standing.fee_tier meets this,
+  // and charges FORMAT_TIER_RAKE_BPS's rate for that tier instead of the
+  // format's standard rate. A per-CONTEST rate, not per-entrant — see
+  // formats.ts's FORMAT_TIER_RAKE_BPS for why.
+  const minPlayerTierRaw = String(formData.get("minPlayerTier") ?? "standard")
+  const minPlayerTier: FeeTier = VALID_PLAYER_TIERS.includes(minPlayerTierRaw as FeeTier)
+    ? (minPlayerTierRaw as FeeTier)
+    : "standard"
 
   if (!VALID_FORMATS.includes(formatId)) {
     return { status: "error", message: "Choose a valid format." }
@@ -98,7 +109,7 @@ export async function createTournamentAction(
 
   let plan: ReturnType<typeof planTournament>
   try {
-    plan = planTournament(formatId, rulesetId, entryFeeCents, fieldSize)
+    plan = planTournament(formatId, rulesetId, entryFeeCents, fieldSize, minPlayerTier)
   } catch (err) {
     return { status: "error", message: err instanceof Error ? err.message : "Invalid contest parameters." }
   }
@@ -147,7 +158,7 @@ export async function createTournamentAction(
     name,
     entry_fee_cents: plan.entryFeeCents,
     field_size: plan.fieldSize,
-    rake_bps: plan.format.rakeBps,
+    rake_bps: plan.rakeBps,
     gross_cents: plan.pool.grossCents,
     rake_cents: plan.pool.feeCents,
     prize_pool_cents: plan.pool.prizePoolCents,
@@ -161,6 +172,7 @@ export async function createTournamentAction(
     status: "open",
     starts_at: startsAt,
     field_commit_mode: demandSized ? "demand" : "fixed",
+    min_player_tier: minPlayerTier,
     ...(formatId === "satellite"
       ? {
           satellite_target_tournament_id: satelliteTargetTournamentId,
@@ -177,11 +189,12 @@ export async function createTournamentAction(
   revalidatePath("/admin/tournaments")
   revalidatePath("/dashboard/tournaments")
 
+  const tierSuffix = minPlayerTier !== "standard" ? ` — ${FEE_TIERS[minPlayerTier].name} tier and above only` : ""
   return {
     status: "success",
     message: demandSized
-      ? `${name} created — up to ${plan.fieldSize} seats at $${(entryFeeCents / 100).toFixed(2)} each, field commits at start time.`
-      : `${name} created — ${plan.fieldSize} seats at $${(entryFeeCents / 100).toFixed(2)} each.`,
+      ? `${name} created — up to ${plan.fieldSize} seats at $${(entryFeeCents / 100).toFixed(2)} each, field commits at start time${tierSuffix}.`
+      : `${name} created — ${plan.fieldSize} seats at $${(entryFeeCents / 100).toFixed(2)} each${tierSuffix}.`,
   }
 }
 

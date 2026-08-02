@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { createClient } from "@/lib/supabase/server"
 import { RULESETS } from "@/lib/game/rulesets"
-import { formatCents } from "@/lib/game/fees"
+import { formatCents, FEE_TIERS, type FeeTier } from "@/lib/game/fees"
 
 export default async function TournamentsPage() {
   const supabase = createClient()
@@ -150,6 +150,11 @@ export default async function TournamentsPage() {
                   </div>
                   {ruleset && <p className="text-xs text-muted-foreground">{ruleset.blurb}</p>}
                   <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+                    {t.min_player_tier !== "standard" && (
+                      <Badge variant="gold">
+                        {FEE_TIERS[t.min_player_tier as FeeTier].name} tier required
+                      </Badge>
+                    )}
                     {lowSeats && t.status !== "full" && (
                       <span className="font-bold text-gold">
                         <span className="tabular">{seatsLeft}</span> seat{seatsLeft === 1 ? "" : "s"} left

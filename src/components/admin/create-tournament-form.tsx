@@ -8,8 +8,11 @@ import { suggestFieldSizeAction, type SizingSuggestion } from "@/actions/admin-t
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { FORMATS, type FormatId } from "@/lib/game/formats"
+import { FORMATS, FORMAT_TIER_RAKE_BPS, type FormatId } from "@/lib/game/formats"
 import { RULESETS } from "@/lib/game/rulesets"
+import { FEE_TIERS, type FeeTier } from "@/lib/game/fees"
+
+const PLAYER_TIERS = Object.values(FEE_TIERS)
 
 const initial: AdminActionState = { status: "idle", message: null }
 
@@ -30,6 +33,7 @@ export function CreateTournamentForm({
 }) {
   const [state, formAction] = useFormState(createTournamentAction, initial)
   const [formatId, setFormatId] = useState("single_elimination")
+  const [minPlayerTier, setMinPlayerTier] = useState<FeeTier>("standard")
   const fieldSizeRef = useRef<HTMLInputElement>(null)
   const [sizing, setSizing] = useState<SizingSuggestion | null>(null)
   const [suggesting, startSuggesting] = useTransition()
@@ -67,7 +71,7 @@ export function CreateTournamentForm({
           >
             {Object.values(FORMATS).map((f) => (
               <option key={f.id} value={f.id}>
-                {f.name} ({f.rakeBps / 100}%)
+                {f.name} ({FORMAT_TIER_RAKE_BPS[f.id][minPlayerTier] / 100}%)
               </option>
             ))}
           </select>
@@ -75,27 +79,53 @@ export function CreateTournamentForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="rulesetId">Ruleset</Label>
+          <Label htmlFor="minPlayerTier">
+            Player tier required{" "}
+            <span className="normal-case text-muted-foreground">(gates entry, sets the rake)</span>
+          </Label>
           <select
-            id="rulesetId"
-            name="rulesetId"
-            defaultValue="classic"
+            id="minPlayerTier"
+            name="minPlayerTier"
+            value={minPlayerTier}
+            onChange={(e) => setMinPlayerTier(e.target.value as FeeTier)}
             className="flex h-10 w-full rounded-md border border-border bg-white/[0.06] px-3 text-sm"
           >
-            {Object.values(RULESETS)
-              // Purist has no specials and no hidden information on a small
-              // enough board to be solved outright — createTournamentAction
-              // rejects it server-side since every tournament here is real
-              // money; left out of the picklist too so there's nothing to
-              // pick in the first place.
-              .filter((r) => r.id !== "purist")
-              .map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
+            {PLAYER_TIERS.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name} — {FORMAT_TIER_RAKE_BPS[formatId as FormatId][t.id] / 100}%
+              </option>
+            ))}
           </select>
+          {minPlayerTier !== "standard" && (
+            <p className="text-xs text-muted-foreground">
+              Only players at {FEE_TIERS[minPlayerTier].name} tier or above (player_standing.fee_tier) can enter.
+              Consider demand-sizing below — this tier&apos;s field is likely thinner than standard.
+            </p>
+          )}
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="rulesetId">Ruleset</Label>
+        <select
+          id="rulesetId"
+          name="rulesetId"
+          defaultValue="classic"
+          className="flex h-10 w-full rounded-md border border-border bg-white/[0.06] px-3 text-sm"
+        >
+          {Object.values(RULESETS)
+            // Purist has no specials and no hidden information on a small
+            // enough board to be solved outright — createTournamentAction
+            // rejects it server-side since every tournament here is real
+            // money; left out of the picklist too so there's nothing to
+            // pick in the first place.
+            .filter((r) => r.id !== "purist")
+            .map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+        </select>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

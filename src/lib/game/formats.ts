@@ -11,7 +11,7 @@
  * settled number are the same value.
  */
 
-import { calculatePrizePool, expectedScore, type PrizePool } from "./fees"
+import { calculatePrizePool, expectedScore, type FeeTier, type PrizePool } from "./fees"
 import { getRuleset, type Ruleset } from "./rulesets"
 
 export type FormatId =
@@ -139,6 +139,43 @@ export const FORMATS: Record<FormatId, FormatDefinition> = {
   },
 }
 
+// --- Rank-tiered rake --------------------------------------------------------
+
+/**
+ * A tournament pools money from an entire field at one rake rate — unlike
+ * ranked, where each match is its own private pot, there is no way to give
+ * different entrants a different effective rate inside the same pool
+ * without breaking gross_cents = entry_fee_cents * field_size, the
+ * invariant every CHECK constraint and downstream payout function assumes.
+ *
+ * So instead of per-player discounting, this is a per-CONTEST discount: a
+ * tournament is created with a minPlayerTier (tournaments.min_player_tier),
+ * gating entry to players whose player_standing.fee_tier meets it
+ * (enforced in check_contest_eligibility(), 20260801000005) and charging
+ * that tier's rate for the whole field. Same shape poker/DFS actually use
+ * for tournaments — rakeback after the fact (this codebase's loyalty
+ * points, §5.2), not a different up-front rate inside one pool.
+ *
+ * Elite is exactly half of standard for every format — the same "half
+ * price once you've proven it" story as FEE_TIERS.elite being exactly half
+ * of FEE_TIERS.standard in fees.ts (5% of 10%). Established sits close to
+ * ranked's own 0.9x ratio, rounded to a clean printed number per format
+ * rather than a raw multiply (12.5% reads better than 12.6%).
+ */
+export const FORMAT_TIER_RAKE_BPS: Record<FormatId, Record<FeeTier, number>> = {
+  single_elimination: { standard: 1400, established: 1250, elite: 700 },
+  swiss: { standard: 1500, established: 1350, elite: 750 },
+  bounty: { standard: 1400, established: 1250, elite: 700 },
+  survivor: { standard: 1500, established: 1350, elite: 750 },
+  ladder: { standard: 1100, established: 1000, elite: 550 },
+  satellite: { standard: 1400, established: 1250, elite: 700 },
+  arena: { standard: 1400, established: 1250, elite: 700 },
+}
+
+export function rakeBpsForTier(formatId: FormatId, tier: FeeTier): number {
+  return FORMAT_TIER_RAKE_BPS[formatId][tier]
+}
+
 // --- Structural math --------------------------------------------------------
 
 /** Rounds needed to resolve a single-elimination bracket. */
@@ -173,13 +210,18 @@ export interface FormatPlan {
   bountyPerHeadCents: number
   /** Prize pool after bounties are carved out. */
   placePoolCents: number
+  /** The tier this plan was priced at — 'standard' unless requested otherwise. */
+  tier: FeeTier
+  /** The actual rate charged, from FORMAT_TIER_RAKE_BPS — may differ from format.rakeBps when tier isn't 'standard'. */
+  rakeBps: number
 }
 
 export function planTournament(
   formatId: FormatId,
   rulesetId: string,
   entryFeeCents: number,
-  fieldSize: number
+  fieldSize: number,
+  tier: FeeTier = "standard"
 ): FormatPlan {
   const format = FORMATS[formatId]
   const ruleset = getRuleset(rulesetId)
@@ -191,13 +233,11 @@ export function planTournament(
   }
   if (entryFeeCents <= 0) throw new Error("Entry fee must be positive")
 
-  // Charged at the format's own rate, which is the rate printed on the card.
-  const pool = calculatePrizePool(
-    "tournament_standard",
-    entryFeeCents,
-    fieldSize,
-    format.rakeBps
-  )
+  // Charged at this tier's rate for the format, which is the rate printed
+  // on the card — see FORMAT_TIER_RAKE_BPS above for why this is a
+  // per-contest tier rather than a per-entrant discount.
+  const rakeBps = rakeBpsForTier(formatId, tier)
+  const pool = calculatePrizePool("tournament_standard", entryFeeCents, fieldSize, rakeBps)
 
   // Bounties come out of the post-rake pool, not on top of it. Taking them
   // from gross would quietly raise the effective rake above the advertised
@@ -234,6 +274,8 @@ export function planTournament(
     bountyPoolCents: distributedBounties,
     bountyPerHeadCents,
     placePoolCents,
+    tier,
+    rakeBps,
   }
 }
 
