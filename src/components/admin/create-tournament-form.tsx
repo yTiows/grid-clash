@@ -173,9 +173,23 @@ export function CreateTournamentForm({
 
       <div className="space-y-2">
         <Label htmlFor="startsAt">
-          Starts at <span className="normal-case text-muted-foreground">(optional — shows a live countdown)</span>
+          Starts at{" "}
+          <span className="normal-case text-muted-foreground">
+            (shows a live countdown; required if demand-sized below)
+          </span>
         </Label>
         <Input id="startsAt" name="startsAt" type="datetime-local" />
+      </div>
+
+      <div className="flex items-start gap-2 rounded-md border border-border p-3">
+        <input id="demandSized" name="demandSized" type="checkbox" className="mt-1" />
+        <Label htmlFor="demandSized" className="normal-case font-normal">
+          Demand-sized — field size above is a ceiling. The real field commits
+          from actual signups at the start time, refunding any shortfall
+          (below {format?.minField ?? "the format minimum"}, contest cancels
+          and everyone is refunded) or overflow (bracket formats snap down to
+          a clean power of two; latest registrants refunded).
+        </Label>
       </div>
 
       {state.status === "error" && <p className="text-sm text-rival">{state.message}</p>}

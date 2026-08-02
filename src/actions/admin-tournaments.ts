@@ -26,6 +26,14 @@ const VALID_FORMATS = Object.keys(FORMATS) as FormatId[]
  * exists on `tournaments` — verified against the live schema rather than
  * assumed. is_admin() is checked first, explicitly, before that client is
  * ever touched.
+ *
+ * demandSized ('demand' field_commit_mode): fieldSize is stored as a
+ * ceiling rather than an exact count — the terms written here (gross/rake/
+ * pool) describe the full-field case, advertised honestly as the max
+ * potential pool. The real field size is committed from actual signups at
+ * startsAt by /api/cron/commit-tournament-fields, which rewrites these same
+ * columns atomically via commit_tournament_field() and refunds any
+ * shortfall/overflow — see 20260801000002_demand_sized_field_commit.sql.
  */
 export async function createTournamentAction(
   _prevState: AdminActionState,
@@ -52,6 +60,15 @@ export async function createTournamentAction(
   // datetime-local has no timezone; treated as the operator's local time and
   // converted to a real instant here rather than stored as a bare string.
   const startsAt = startsAtRaw ? new Date(startsAtRaw).toISOString() : null
+  // 'demand': field_size becomes a ceiling, the real size is committed from
+  // actual signups at startsAt by /api/cron/commit-tournament-fields
+  // (scheduling.ts's commitField — see 20260801000002_demand_sized_field_commit.sql).
+  // Requires startsAt, since that's the registration window's close time in
+  // this mode, not just a display countdown.
+  const demandSized = formData.get("demandSized") === "on"
+  if (demandSized && !startsAt) {
+    return { status: "error", message: "Demand-sized contests need a start time — that's when the field commits." }
+  }
 
   if (!VALID_FORMATS.includes(formatId)) {
     return { status: "error", message: "Choose a valid format." }
@@ -143,6 +160,7 @@ export async function createTournamentAction(
     place_pool_cents: plan.placePoolCents,
     status: "open",
     starts_at: startsAt,
+    field_commit_mode: demandSized ? "demand" : "fixed",
     ...(formatId === "satellite"
       ? {
           satellite_target_tournament_id: satelliteTargetTournamentId,
@@ -159,7 +177,12 @@ export async function createTournamentAction(
   revalidatePath("/admin/tournaments")
   revalidatePath("/dashboard/tournaments")
 
-  return { status: "success", message: `${name} created — ${plan.fieldSize} seats at ${(entryFeeCents / 100).toFixed(2)} each.` }
+  return {
+    status: "success",
+    message: demandSized
+      ? `${name} created — up to ${plan.fieldSize} seats at $${(entryFeeCents / 100).toFixed(2)} each, field commits at start time.`
+      : `${name} created — ${plan.fieldSize} seats at $${(entryFeeCents / 100).toFixed(2)} each.`,
+  }
 }
 
 /**

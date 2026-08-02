@@ -1,8 +1,3 @@
-// Generated from the live Supabase project (grid-clash, ajuxrpxpayyaxsrijuir)
-// after applying every migration through 20260726000035_http_rate_limiting.
-// Regenerate after adding a migration with:
-//   npx supabase gen types typescript --project-id ajuxrpxpayyaxsrijuir > src/lib/types/database.types.ts
-
 export type Json =
   | string
   | number
@@ -2176,6 +2171,7 @@ export type Database = {
           blurb: string
           board_size: number
           connect_target: number
+          hidden_shields: boolean
           id: string
           inv_bomb: number
           inv_normal: number
@@ -2189,6 +2185,7 @@ export type Database = {
           blurb: string
           board_size: number
           connect_target: number
+          hidden_shields?: boolean
           id: string
           inv_bomb: number
           inv_normal: number
@@ -2202,6 +2199,7 @@ export type Database = {
           blurb?: string
           board_size?: number
           connect_target?: number
+          hidden_shields?: boolean
           id?: string
           inv_bomb?: number
           inv_normal?: number
@@ -2820,6 +2818,7 @@ export type Database = {
           completed_at: string | null
           created_at: string
           entry_fee_cents: number
+          field_commit_mode: string
           field_size: number
           format_id: string
           gross_cents: number
@@ -2848,6 +2847,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           entry_fee_cents: number
+          field_commit_mode?: string
           field_size: number
           format_id?: string
           gross_cents: number
@@ -2876,6 +2876,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           entry_fee_cents?: number
+          field_commit_mode?: string
           field_size?: number
           format_id?: string
           gross_cents?: number
@@ -3167,10 +3168,17 @@ export type Database = {
         Args: { p_stake_cents: number; p_user_id: string }
         Returns: undefined
       }
+      assert_commit_tournament_field_works: { Args: never; Returns: string }
       assert_function_dependencies: { Args: never; Returns: string }
       assert_ledger_vocabulary: { Args: never; Returns: string }
+      assert_list_open_disputes_filters_by_status: {
+        Args: never
+        Returns: string
+      }
       assert_loyalty_points_mint_works: { Args: never; Returns: string }
       assert_loyalty_redemption_works: { Args: never; Returns: string }
+      assert_reference_tables_restored: { Args: never; Returns: string }
+      assert_rulesets_seeded: { Args: never; Returns: string }
       assert_satellite_completion_works: { Args: never; Returns: string }
       assert_settlement_works: { Args: never; Returns: string }
       assert_tournament_completion_works: { Args: never; Returns: string }
@@ -3212,6 +3220,10 @@ export type Database = {
         }[]
       }
       cleanup_rate_limit_counters: { Args: never; Returns: number }
+      commit_tournament_field: {
+        Args: { p_final_field_size: number; p_tournament_id: string }
+        Returns: undefined
+      }
       complete_satellite_tournament: {
         Args: { p_bubble?: Json; p_seat_winners: Json; p_tournament_id: string }
         Returns: undefined
