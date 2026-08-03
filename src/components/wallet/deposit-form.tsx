@@ -87,24 +87,36 @@ function AmountStep({
     onStarted(result.clientSecret)
   }
 
+  const usingPreset = !customDollars.trim()
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2">
-        {PRESETS_CENTS.map((c) => (
-          <label key={c} className="panel panel-interactive cursor-pointer p-3 text-center">
-            <input
-              type="radio"
-              name="amountCents"
-              checked={!customDollars.trim() && presetCents === c}
-              onChange={() => {
-                setPresetCents(c)
-                setCustomDollars("")
-              }}
-              className="sr-only"
-            />
-            <span className="tabular font-bold">${(c / 100).toFixed(0)}</span>
-          </label>
-        ))}
+        {PRESETS_CENTS.map((c) => {
+          const selected = usingPreset && presetCents === c
+          return (
+            <label
+              key={c}
+              className={`panel panel-interactive cursor-pointer p-3 text-center ${
+                selected ? "border-primary bg-primary/10" : ""
+              }`}
+            >
+              <input
+                type="radio"
+                name="amountCents"
+                checked={selected}
+                onChange={() => {
+                  setPresetCents(c)
+                  setCustomDollars("")
+                }}
+                className="sr-only"
+              />
+              <span className={`tabular font-bold ${selected ? "text-primary" : ""}`}>
+                ${(c / 100).toFixed(0)}
+              </span>
+            </label>
+          )
+        })}
       </div>
       <div className="space-y-2">
         <Label htmlFor="custom-amount">Or a custom amount ($)</Label>
@@ -119,6 +131,15 @@ function AmountStep({
           onChange={(e) => setCustomDollars(e.target.value)}
         />
       </div>
+
+      {/* Money surfaces stay plain (BRAND.md §6) even while the chrome
+          around them gets more motion — this is a real, checkable fact
+          stated flatly, not a promotional line. */}
+      <div className="flex items-center justify-between border-t border-white/15 pt-3 text-sm">
+        <span className="text-muted-foreground">Fee</span>
+        <span className="tabular font-semibold">$0.00 — deposits are never charged</span>
+      </div>
+
       {error && <p className="text-sm text-rival">{error}</p>}
       <Button
         type="button"

@@ -111,11 +111,20 @@
     box-shadow: 0 1px 0 0 rgba(0, 0, 0, 0.4), 0 6px 16px -8px rgba(0, 0, 0, 0.55);
   }
 
+  /* Same spring language as .cell's hover, just calmer — a panel is chrome
+     around the game, not the game itself, so it lifts a couple pixels
+     instead of scaling up. Brought in line with the rest of the motion
+     sweep (deposit tier buttons were the flat holdout — see deposit-form.tsx). */
   .panel-interactive {
-    transition: border-color 140ms ease, background-color 140ms ease;
+    transition: border-color 140ms ease, background-color 140ms ease,
+      transform 160ms var(--ease-bounce);
   }
   .panel-interactive:hover {
     border-color: var(--border-strong);
+    transform: translateY(-2px);
+  }
+  .panel-interactive:active {
+    transform: translateY(0) scale(0.98);
   }
 
   /* Headline weight. Used for one or two things per screen, never as a

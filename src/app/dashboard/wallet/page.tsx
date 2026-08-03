@@ -20,9 +20,19 @@ function ChecklistRow({
   action: React.ReactNode
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-white/15 py-3 last:border-0">
-      <div className="flex items-center gap-2">
-        <span className={done ? "text-primary" : "text-muted-foreground"}>{done ? "✓" : "○"}</span>
+    <div className="flex items-center justify-between gap-4 border-b border-white/15 py-3.5 transition-colors last:border-0">
+      <div className="flex items-center gap-2.5">
+        {/* Same landed-piece spring as the board (.cell-place, globals.css)
+            — a completed verification step is a small win, same language. */}
+        <span
+          className={`flex h-5 w-5 items-center justify-center rounded-full border text-xs font-bold ${
+            done
+              ? "cell-place border-primary bg-primary/15 text-primary"
+              : "border-border text-muted-foreground"
+          }`}
+        >
+          {done ? "✓" : "○"}
+        </span>
         <span className="text-sm">{label}</span>
       </div>
       {done ? <Badge variant="default">Done</Badge> : action}
@@ -60,7 +70,7 @@ export default async function WalletPage() {
       </div>
 
       <Card className="foil">
-        <CardContent className="pt-6 text-center">
+        <CardContent className="flex items-center justify-between gap-4 py-5">
           <div className="text-sm font-medium uppercase tracking-wide text-gold-foreground/70">
             Current balance
           </div>
