@@ -243,10 +243,37 @@ export class SqlMatchStore implements MatchStore {
   }
 
   async recordTournamentResult(input: TournamentSettlementInput): Promise<void> {
+    // FOUND LIVE-BREAKING (2026-08-01), by executing this against the live
+    // project (a rolled-back probe), not by reading the schema: input.matchId
+    // is a fresh randomUUID() match-server.ts generates for every tournament
+    // match (see startTournamentMatch), but no public.matches row is ever
+    // created for it — record_tournament_match_result() only writes
+    // tournament_matches (see 20260726000027_bounty_claim.sql). Passing it
+    // through as p_match_id violates tournament_matches_match_id_fkey every
+    // single time, meaning NO tournament match has ever been able to
+    // complete via real gameplay (the WS server's actual settle() path) —
+    // only the admin manual-completion path (which never calls this
+    // function) has ever worked. tournament_matches.match_id is nullable by
+    // design (`references public.matches(id) on delete set null`, no `not
+    // null`) specifically for this reason — passing null is correct, not a
+    // workaround. loserId/reason/moveSequence/durationSeconds below are
+    // still computed by match-server.ts and threaded all the way here
+    // (clearly intended for a real per-tournament-match matches/
+    // match_replays row, mirroring settle_ranked_match) but deliberately
+    // NOT written now: doing so touches match_disputes' "ranked matches
+    // only" filing eligibility, check_contest_eligibility's ranked-match
+    // count, and the flag_suspicious_match_on_match_insert collusion
+    // trigger — real, fixable, but a bigger and more sensitive change than
+    // fixing an active crash calls for. Left as a flagged follow-up.
     const { error } = await this.db.rpc("record_tournament_match_result", {
       p_tournament_match_id: input.tournamentMatchId,
       p_winner_id: input.winnerId,
-      p_match_id: input.matchId,
+      // undefined, not null — the generated RPC arg type is `string |
+      // undefined` (p_match_id uuid DEFAULT NULL on the SQL side), and
+      // omitting the key entirely is what actually lets Postgres apply
+      // its own DEFAULT NULL rather than the client sending a literal
+      // JSON null through PostgREST.
+      p_match_id: undefined,
     })
 
     if (error) {
