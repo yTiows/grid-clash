@@ -18,6 +18,15 @@ export const signUpSchema = z.object({
   acceptedTerms: z.literal("on", {
     errorMap: () => ({ message: "You must accept the terms to continue" }),
   }),
+  // Optional: another player's username. Attribution only (users.invited_by_
+  // user_id) — no reward/payout mechanics, see 20260801000006_social_tab.sql.
+  // Empty string means "no referral," not a validation failure.
+  referredBy: z
+    .string()
+    .trim()
+    .max(32)
+    .optional()
+    .transform((v) => (v ? v : undefined)),
 })
 
 export const signInSchema = z.object({

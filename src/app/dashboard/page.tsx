@@ -1,5 +1,6 @@
 import Link from "next/link"
 
+import { CompleteAttestationPrompt } from "@/components/auth/complete-attestation-prompt"
 import { StakePicker } from "@/components/lobby/stake-picker"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -78,6 +79,8 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {!profile.date_of_birth_self_attested && <CompleteAttestationPrompt />}
+
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="display text-2xl">Welcome back, {profile.username}</h1>

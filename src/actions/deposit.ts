@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { stripe } from "@/lib/stripe"
 import { checkRateLimit, formatRetryAfter } from "@/lib/middleware/rate-limit"
 
@@ -67,11 +68,23 @@ export async function createDepositIntentAction(amountCents: number): Promise<Cr
     })
     customerId = customer.id
 
-    // Best-effort persistence. If this write fails, the next deposit simply
-    // creates (and this time saves) another customer — a minor annoyance,
-    // never a money-safety issue, since crediting is keyed off the webhook's
-    // payment_intent id, not the customer id.
-    await supabase.from("users").update({ stripe_customer_id: customerId }).eq("id", user.id)
+    // FOUND BROKEN (2026-08-01): this "best-effort" write was silently
+    // failing on EVERY deposit, not just occasionally — insert/update/
+    // delete on users is revoked from authenticated
+    // (20260724000006_security_hardening.sql), so customerId never actually
+    // persisted and every deposit created a fresh Stripe customer. Still
+    // never a money-safety issue (crediting is keyed off the webhook's
+    // payment_intent id), but "minor annoyance" was doing a lot of work in
+    // that old comment. Fixed with the service-role client, same as
+    // auth.ts/phone.ts/withdrawal.ts.
+    const admin = createAdminClient()
+    const { error: persistError } = await admin
+      .from("users")
+      .update({ stripe_customer_id: customerId })
+      .eq("id", user.id)
+    if (persistError) {
+      console.error("[createDepositIntentAction] failed to persist stripe customer id", persistError)
+    }
   }
 
   try {

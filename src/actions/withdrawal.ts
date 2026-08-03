@@ -4,6 +4,7 @@ import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { stripe } from "@/lib/stripe"
 import { checkRateLimit, formatRetryAfter } from "@/lib/middleware/rate-limit"
 
@@ -43,10 +44,19 @@ export async function startConnectOnboardingAction(): Promise<void> {
       metadata: { supabase_user_id: user.id },
     })
     accountId = account.id
-    await supabase
+    // FOUND BROKEN (2026-08-01): silently no-oped on the plain session
+    // client — insert/update/delete on users is revoked from authenticated
+    // (20260724000006_security_hardening.sql). Without this persisting, a
+    // new Connect Express account was created on every single onboarding
+    // attempt instead of reusing the first one. Same fix as auth.ts/phone.ts.
+    const admin = createAdminClient()
+    const { error: persistError } = await admin
       .from("users")
       .update({ stripe_connect_account_id: accountId })
       .eq("id", user.id)
+    if (persistError) {
+      console.error("[startConnectOnboardingAction] failed to persist connect account id", persistError)
+    }
   }
 
   const origin = headers().get("origin")

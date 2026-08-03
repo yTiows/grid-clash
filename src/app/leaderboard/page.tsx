@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/server"
+import { TITLE_TIER_MARK } from "@/lib/game/titles"
 
 /**
  * public.leaderboard (supabase/migrations/20260724000009_reputation.sql) is
@@ -17,26 +18,6 @@ const TRUST_BADGE_VARIANT: Record<string, "default" | "outline" | "muted" | "riv
   building: "outline",
   trusted: "default",
   veteran: "rival",
-}
-
-// Title tiers (player_titles, supabase/migrations/20260724000005_tournaments.sql)
-// are deterministic achievements. Per that migration's own comment, how a
-// tier renders is deliberately never explained in UI copy — only the
-// treatment itself is shown, and meaning spreads by a player seeing it worn.
-// --gold is reserved for money surfaces only (brand/BRAND.md "Colour"), so no
-// tier mark below uses it, including the tier literally named "gold."
-const TITLE_TIER_MARK: Record<string, string> = {
-  dollar: "border-white/25 text-muted-foreground",
-  bronze: "border-accent text-accent",
-  // Silver as a neutral metal rather than a hue — the design system deliberately
-  // has only two decorative colors (primary, accent) plus the reserved ones
-  // (gold for money, rival for the board), so this tier earns its distinction
-  // from brightness, not from a fifth color.
-  silver: "border-white/60 text-foreground",
-  gold: "border-primary text-primary font-black",
-  obsidian: "border-border bg-background text-foreground",
-  // Light gradient fill needs dark text for contrast, not text-foreground.
-  milestone: "border-border bg-gradient-to-r from-primary to-accent text-background font-black",
 }
 
 export default async function LeaderboardPage() {
@@ -114,9 +95,12 @@ export default async function LeaderboardPage() {
                         </td>
                         <td className="px-2 py-3">
                           <div className="flex items-center gap-2">
-                            <span className={cn("font-bold", isMe && "text-primary")}>
+                            <Link
+                              href={`/players/${row.username}`}
+                              className={cn("font-bold hover:underline", isMe && "text-primary")}
+                            >
                               {row.username}
-                            </span>
+                            </Link>
                             {tier && (
                               <span
                                 className={cn(

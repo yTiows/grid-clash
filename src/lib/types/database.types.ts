@@ -776,6 +776,76 @@ export type Database = {
           },
         ]
       }
+      friendships: {
+        Row: {
+          addressee_id: string
+          created_at: string
+          id: string
+          requester_id: string
+          responded_at: string | null
+          status: string
+        }
+        Insert: {
+          addressee_id: string
+          created_at?: string
+          id?: string
+          requester_id: string
+          responded_at?: string | null
+          status?: string
+        }
+        Update: {
+          addressee_id?: string
+          created_at?: string
+          id?: string
+          requester_id?: string
+          responded_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "friendships_addressee_id_fkey"
+            columns: ["addressee_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_addressee_id_fkey"
+            columns: ["addressee_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_addressee_id_fkey"
+            columns: ["addressee_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_requester_id_fkey"
+            columns: ["requester_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_requester_id_fkey"
+            columns: ["requester_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_requester_id_fkey"
+            columns: ["requester_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ip_blocks: {
         Row: {
           added_at: string
@@ -2991,12 +3061,14 @@ export type Database = {
       users: {
         Row: {
           account_status: string
+          avatar_url: string | null
           balance_cents: number
           created_at: string
           date_of_birth_self_attested: string | null
           elo_rating: number
           email: string
           id: string
+          invited_by_user_id: string | null
           is_admin: boolean
           kyc_country: string | null
           kyc_provider_user_id: string | null
@@ -3018,12 +3090,14 @@ export type Database = {
         }
         Insert: {
           account_status?: string
+          avatar_url?: string | null
           balance_cents?: number
           created_at?: string
           date_of_birth_self_attested?: string | null
           elo_rating?: number
           email: string
           id: string
+          invited_by_user_id?: string | null
           is_admin?: boolean
           kyc_country?: string | null
           kyc_provider_user_id?: string | null
@@ -3045,12 +3119,14 @@ export type Database = {
         }
         Update: {
           account_status?: string
+          avatar_url?: string | null
           balance_cents?: number
           created_at?: string
           date_of_birth_self_attested?: string | null
           elo_rating?: number
           email?: string
           id?: string
+          invited_by_user_id?: string | null
           is_admin?: boolean
           kyc_country?: string | null
           kyc_provider_user_id?: string | null
@@ -3070,7 +3146,29 @@ export type Database = {
           updated_at?: string
           username?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "users_invited_by_user_id_fkey"
+            columns: ["invited_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "users_invited_by_user_id_fkey"
+            columns: ["invited_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "users_invited_by_user_id_fkey"
+            columns: ["invited_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       withdrawal_addresses: {
         Row: {
@@ -3153,6 +3251,7 @@ export type Database = {
       }
       public_players: {
         Row: {
+          avatar_url: string | null
           created_at: string | null
           elo_rating: number | null
           equipped_title_tier: string | null
@@ -3172,6 +3271,11 @@ export type Database = {
         Returns: undefined
       }
       assert_commit_tournament_field_works: { Args: never; Returns: string }
+      assert_create_challenge_respects_friendship_and_preferences: {
+        Args: never
+        Returns: string
+      }
+      assert_friendship_flow_works: { Args: never; Returns: string }
       assert_function_dependencies: { Args: never; Returns: string }
       assert_ledger_vocabulary: { Args: never; Returns: string }
       assert_list_open_disputes_filters_by_status: {
@@ -3238,6 +3342,14 @@ export type Database = {
       complete_tournament: {
         Args: { p_placings: Json; p_tournament_id: string }
         Returns: undefined
+      }
+      create_challenge: {
+        Args: {
+          p_ruleset_id: string
+          p_stake_cents: number
+          p_target_id: string
+        }
+        Returns: string
       }
       create_tournament_round: {
         Args: {
@@ -3349,6 +3461,14 @@ export type Database = {
           p_resolution_note: string
           p_status: string
         }
+        Returns: undefined
+      }
+      respond_to_challenge: {
+        Args: { p_accept: boolean; p_challenge_id: string }
+        Returns: undefined
+      }
+      respond_to_friend_request: {
+        Args: { p_accept: boolean; p_friendship_id: string }
         Returns: undefined
       }
       settle_ranked_match: {

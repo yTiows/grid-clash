@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { twilioClient, TWILIO_VERIFY_SERVICE_SID } from "@/lib/twilio"
 
 export type PhoneActionState = {
@@ -128,16 +129,55 @@ export async function verifyPhoneCodeAction(
     return { status: "error", message: "Incorrect or expired code." }
   }
 
-  await supabase
+  // FOUND BROKEN (2026-08-01): both writes below silently no-op on the
+  // plain session client — phone_verifications has only a SELECT RLS
+  // policy for authenticated ("updates only via service-role" per
+  // 20260724000003_rls_policies.sql's own comment), and users has
+  // insert/update/delete revoked from authenticated entirely
+  // (20260724000006_security_hardening.sql). Confirmed live: both real
+  // accounts on this project show account_status still 'phone_pending'
+  // despite Twilio verification succeeding. Fixed by using the
+  // service-role client, same fix as auth.ts's signUpAction.
+  const admin = createAdminClient()
+
+  const { error: verificationError } = await admin
     .from("phone_verifications")
     .update({ verified_at: new Date().toISOString() })
     .eq("user_id", user.id)
     .eq("phone_number", phoneNumber)
+  if (verificationError) {
+    console.error("[verifyPhoneCodeAction] failed to record verified_at", verificationError)
+  }
 
-  await supabase
+  const { error: userError } = await admin
     .from("users")
     .update({ phone_verified: true, phone_number: phoneNumber })
     .eq("id", user.id)
+  if (userError) {
+    console.error("[verifyPhoneCodeAction] failed to update users.phone_verified", userError)
+    return { status: "error", message: "Verified, but couldn't update your account. Try again." }
+  }
+
+  // ALSO FOUND MISSING (2026-08-01), not just broken: handle_new_user sets
+  // every new account to account_status = 'phone_pending', but grepping the
+  // entire codebase for anywhere that ever sets account_status = 'active'
+  // found exactly one place — admin-automation.ts clearing a fraud/bot
+  // review, which is the wrong trigger for this. Nothing has ever
+  // transitioned a normal signup out of 'phone_pending', meaning every real
+  // account (not created by hand in SQL) has been permanently blocked from
+  // assert_can_wager/check_deposit_allowed regardless of this fix. Phone
+  // verification succeeding is the obvious, minimal condition to add —
+  // scoped to only flip FROM 'phone_pending' so an admin's suspended/banned/
+  // kyc_pending decision is never silently overwritten by a player just
+  // verifying their phone.
+  const { error: activateError } = await admin
+    .from("users")
+    .update({ account_status: "active" })
+    .eq("id", user.id)
+    .eq("account_status", "phone_pending")
+  if (activateError) {
+    console.error("[verifyPhoneCodeAction] failed to activate account", activateError)
+  }
 
   return { status: "verified", message: "Phone verified." }
 }

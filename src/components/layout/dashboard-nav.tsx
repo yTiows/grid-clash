@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/practice", label: "Practice" },
   { href: "/dashboard/tournaments", label: "Tournaments" },
   { href: "/leaderboard", label: "Leaderboard" },
+  { href: "/dashboard/friends", label: "Friends" },
   { href: "/dashboard/wallet", label: "Wallet" },
   { href: "/tutorial", label: "Tutorial" },
 ]
@@ -53,7 +54,9 @@ export function DashboardNav({
             <span className="text-muted-foreground">Balance </span>
             <span className="tabular money font-medium">${(balanceCents / 100).toFixed(2)}</span>
           </div>
-          <span className="text-sm text-muted-foreground">{username}</span>
+          <Link href={`/players/${username}`} className="text-sm text-muted-foreground hover:text-foreground">
+            {username}
+          </Link>
           <form action={signOutAction}>
             <Button variant="outline" size="sm" type="submit">
               Sign out
@@ -91,7 +94,9 @@ export function DashboardNav({
               </Link>
             ))}
             <div className="flex items-center justify-between px-2 py-2 text-sm text-muted-foreground">
-              <span>{username}</span>
+              <Link href={`/players/${username}`} onClick={() => setOpen(false)} className="hover:text-foreground">
+                {username}
+              </Link>
               <form action={signOutAction}>
                 <Button variant="outline" size="sm" type="submit">
                   Sign out

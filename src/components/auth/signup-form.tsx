@@ -67,6 +67,14 @@ export function SignupForm() {
         </p>
       </div>
 
+      <div className="space-y-2">
+        <Label htmlFor="referredBy">
+          Invited by{" "}
+          <span className="normal-case text-muted-foreground">(optional — a friend&apos;s username)</span>
+        </Label>
+        <Input id="referredBy" name="referredBy" type="text" autoComplete="off" maxLength={32} />
+      </div>
+
       <label className="flex items-start gap-2 text-xs text-muted-foreground">
         <input
           type="checkbox"
