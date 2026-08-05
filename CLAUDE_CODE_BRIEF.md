@@ -366,7 +366,7 @@ For every item you complete: `npx tsc --noEmit` clean, `npx next lint` clean, an
 Testing §0 rule 6 (write the phase list before Phase 1) against a real commit sequence, at the user's explicit request, before trusting it on anything real like the rebrand. Deliberately trivial and reversible: a read-only script, no game logic, no money, no schema.
 
 **Task:** `scripts/list-rulesets.ts` — prints ruleset data from `src/lib/game/rulesets.ts`.
-- Phase 1: pending — print each ruleset's `id`/`name`/`boardSize`/`connectTarget`.
+- Phase 1: **complete** — `scripts/list-rulesets.ts`, executed for real (`npx tsx`), 10 rulesets printed correctly (5x5/connect4 x8, 6x6/connect5 siege, 7x7/connect5 sprawl).
 - Phase 2: pending — extend with `moveTimeoutMs`/`hiddenShields`, sort output alphabetically by `id`.
 
 This section (and the script) gets removed once the test is confirmed — the artifact that proves the rule held is the `git log` order of commits, not this text staying in the brief permanently.
