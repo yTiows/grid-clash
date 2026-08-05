@@ -20,6 +20,7 @@ import {
 } from "@/lib/game/engine"
 import { getRuleset } from "@/lib/game/rulesets"
 import { seedFromId, seededRandom } from "@/lib/game/bracket"
+import { computeStrategicScore, isStrategicScoreEnabled, type ReplayEntry } from "@/lib/game/scoring"
 import {
   HEARTBEAT_INTERVAL_MS,
   HEARTBEAT_TIMEOUT_MS,
@@ -318,6 +319,17 @@ interface LiveMatch {
   startedAt: number
   latencies: Record<PlayerSlot, number[]>
   moveSequence: string[]
+  /**
+   * Structured mirror of moveSequence (Feature A) — the same moves/timeouts,
+   * kept as ReplayEntry objects instead of display strings so
+   * computeStrategicScore can replay them exactly. Reset to [] on every
+   * sudden-death round (see replayAsSuddenDeath) rather than appended,
+   * because computeStrategicScore replays from a fresh board and throws if
+   * fed moves past a completed game — a settlement should only ever score
+   * the one round that actually produced the result being settled, not
+   * every drawn round that preceded it.
+   */
+  strategicReplay: ReplayEntry[]
   /** Incremented by replayAsSuddenDeath. Caps ranked's exposure — see
    * MAX_RANKED_SUDDEN_DEATH_ROUNDS. Tournament is left uncapped, matching
    * its pre-existing behavior from before ranked also started replaying. */
@@ -670,6 +682,7 @@ export class MatchServer {
       startedAt: this.clock.now(),
       latencies: { 1: [], 2: [] },
       moveSequence: [],
+      strategicReplay: [],
       suddenDeathRounds: 0,
       disconnected: {},
       spectatorUserIds: new Set(),
@@ -820,6 +833,7 @@ export class MatchServer {
       startedAt: this.clock.now(),
       latencies: { 1: [], 2: [] },
       moveSequence: [],
+      strategicReplay: [],
       suddenDeathRounds: 0,
       disconnected: {},
       spectatorUserIds: new Set(),
@@ -945,6 +959,7 @@ export class MatchServer {
       startedAt: this.clock.now(),
       latencies: { 1: [], 2: [] },
       moveSequence: [],
+      strategicReplay: [],
       suddenDeathRounds: 0,
       disconnected: {},
       spectatorUserIds: new Set(),
@@ -1030,6 +1045,15 @@ export class MatchServer {
         message.targetIndex !== undefined ? `>${message.targetIndex}` : ""
       }`
     )
+    match.strategicReplay.push({
+      kind: "move",
+      slot,
+      move: {
+        kind: message.kind,
+        index: message.index,
+        ...(message.targetIndex !== undefined ? { targetIndex: message.targetIndex } : {}),
+      },
+    })
 
     match.state = result.state
     this.advanceTurn(match)
@@ -1065,6 +1089,7 @@ export class MatchServer {
 
       const slot = match.state.turn
       match.latencies[slot].push(getRuleset(match.rulesetId).moveTimeoutMs)
+      match.strategicReplay.push({ kind: "timeout", slot })
       match.state = applyTimeout(match.state, slot)
       this.advanceTurn(match)
 
@@ -1291,7 +1316,7 @@ export class MatchServer {
       if (match.state.status === "player_1_won") winnerSlot = 1
       else if (match.state.status === "player_2_won") winnerSlot = 2
     }
-    const isDraw = winnerSlot === null
+    let isDraw = winnerSlot === null
 
     /**
      * A competitive match — ranked or bracket — should produce exactly one
@@ -1313,6 +1338,41 @@ export class MatchServer {
       this.replayAsSuddenDeath(match)
       return
     }
+
+    /**
+     * Feature A — Strategic Score win condition (CLAUDE_CODE_BRIEF.md
+     * Phase 6A freeze lifted by explicit, logged owner override; see §3/§4).
+     * STRATEGIC_SCORE_ENABLED_RULESETS is empty by default (scoring.ts) —
+     * this block is a live no-op for every ruleset until a human
+     * deliberately populates it, which is a separate decision from having
+     * this code path exist. Scoped to ranked only for this pass: tournament
+     * brackets never reach here with isDraw (they always replay instead,
+     * see the branch above) and have their own no-draw settlement
+     * semantics this hasn't been validated against; wager mirrors ranked's
+     * shape closely enough to extend later but wasn't part of Phase 2's
+     * simulation. forcedWinner is excluded on purpose — a resign/abandon
+     * has no "who played better" question for Strategic Score to answer
+     * (see scoring.ts's own header).
+     *
+     * THREAT: a bug in scoring.ts (or a genuinely malformed replay) must
+     * never be able to block or corrupt a real-money settlement. FIX: any
+     * throw here is caught and logged, and settlement falls back to the
+     * traditional winner exactly as if this block didn't run — the
+     * strategic engine can only ever change who wins when it succeeds
+     * cleanly, never leave a match unsettled.
+     */
+    if (!forcedWinner && match.kind === "ranked" && isStrategicScoreEnabled(match.rulesetId)) {
+      try {
+        const scored = computeStrategicScore(getRuleset(match.rulesetId), match.strategicReplay)
+        winnerSlot = scored.strategicWinner
+      } catch (err) {
+        console.error(
+          `[strategic-score] falling back to traditional winner for match ${match.id} (ruleset ${match.rulesetId}):`,
+          err
+        )
+      }
+    }
+    isDraw = winnerSlot === null
 
     match.settled = true
     if (match.turnTimer) this.clock.clearTimeout(match.turnTimer)
@@ -1475,6 +1535,11 @@ export class MatchServer {
     // durationSeconds should reflect the real time both players spent, not
     // just the final board.
     match.moveSequence.push(`--- sudden death round ${match.suddenDeathRounds}: fresh board ---`)
+
+    // strategicReplay IS reset here, unlike moveSequence above — see the
+    // field's own comment on LiveMatch. Whichever round actually settles is
+    // the only one Strategic Score should ever see.
+    match.strategicReplay = []
 
     this.advanceTurn(match, MATCH_START_GRACE_MS)
 
