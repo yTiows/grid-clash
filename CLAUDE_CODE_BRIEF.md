@@ -367,6 +367,8 @@ Testing §0 rule 6 (write the phase list before Phase 1) against a real commit s
 
 **Task:** `scripts/list-rulesets.ts` — prints ruleset data from `src/lib/game/rulesets.ts`.
 - Phase 1: **complete** — `scripts/list-rulesets.ts`, executed for real (`npx tsx`), 10 rulesets printed correctly (5x5/connect4 x8, 6x6/connect5 siege, 7x7/connect5 sprawl).
-- Phase 2: pending — extend with `moveTimeoutMs`/`hiddenShields`, sort output alphabetically by `id`.
+- Phase 2: **complete** — executed for real, alphabetical by `id` confirmed (blitz→sprawl), `feint` is the only `hiddenShields=true` row, matching `rulesets.ts`.
+
+**Test result: the rule held.** Commit order was phase-list (`a9df5ba`) → Phase 1 work+status (`e1d89a8`) → Phase 2 work+status (next commit) — verifiable directly in `git log`, not just asserted. This section and `scripts/list-rulesets.ts` are removed in a follow-up cleanup commit now that the test is done; the commit history itself is the permanent evidence, not this text.
 
 This section (and the script) gets removed once the test is confirmed — the artifact that proves the rule held is the `git log` order of commits, not this text staying in the brief permanently.

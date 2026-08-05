@@ -7,6 +7,11 @@
 
 import { RULESETS } from "../src/lib/game/rulesets"
 
-for (const ruleset of Object.values(RULESETS)) {
-  console.log(`${ruleset.id}: ${ruleset.name} — ${ruleset.boardSize}x${ruleset.boardSize}, connect ${ruleset.connectTarget}`)
+const sorted = Object.values(RULESETS).sort((a, b) => a.id.localeCompare(b.id))
+
+for (const ruleset of sorted) {
+  console.log(
+    `${ruleset.id}: ${ruleset.name} — ${ruleset.boardSize}x${ruleset.boardSize}, connect ${ruleset.connectTarget}, ` +
+      `${ruleset.moveTimeoutMs}ms clock, hiddenShields=${ruleset.hiddenShields}`
+  )
 }
