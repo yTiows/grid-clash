@@ -1578,6 +1578,96 @@ export type Database = {
           },
         ]
       }
+      performance_index_snapshots: {
+        Row: {
+          computed_at: string
+          id: string
+          match_id: string
+          moves_made: number
+          ruleset_id: string
+          score_board_control: number
+          score_dual_threat: number
+          score_forced_response: number
+          score_four_in_a_row: number
+          score_positional_dominance: number
+          score_strategic_pressure: number
+          score_threat_density: number
+          score_threat_neutralized: number
+          user_id: string
+          won: boolean
+        }
+        Insert: {
+          computed_at?: string
+          id?: string
+          match_id: string
+          moves_made: number
+          ruleset_id: string
+          score_board_control?: number
+          score_dual_threat?: number
+          score_forced_response?: number
+          score_four_in_a_row?: number
+          score_positional_dominance?: number
+          score_strategic_pressure?: number
+          score_threat_density?: number
+          score_threat_neutralized?: number
+          user_id: string
+          won: boolean
+        }
+        Update: {
+          computed_at?: string
+          id?: string
+          match_id?: string
+          moves_made?: number
+          ruleset_id?: string
+          score_board_control?: number
+          score_dual_threat?: number
+          score_forced_response?: number
+          score_four_in_a_row?: number
+          score_positional_dominance?: number
+          score_strategic_pressure?: number
+          score_threat_density?: number
+          score_threat_neutralized?: number
+          user_id?: string
+          won?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "performance_index_snapshots_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_index_snapshots_ruleset_id_fkey"
+            columns: ["ruleset_id"]
+            isOneToOne: false
+            referencedRelation: "rulesets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_index_snapshots_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_index_snapshots_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_index_snapshots_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       personal_bests: {
         Row: {
           best_finish_place: number | null
@@ -1946,7 +2036,14 @@ export type Database = {
           distinct_opponents: number
           fee_tier: string
           is_provisional: boolean
+          performance_index: number
+          performance_index_percentile: number | null
           performance_std_dev: number | null
+          pi_consistency: number
+          pi_conversion: number
+          pi_defense: number
+          pi_tactical: number
+          pi_threat_creation: number
           si_consistency: number
           si_fair_play: number
           si_opposition: number
@@ -1966,7 +2063,14 @@ export type Database = {
           distinct_opponents?: number
           fee_tier?: string
           is_provisional?: boolean
+          performance_index?: number
+          performance_index_percentile?: number | null
           performance_std_dev?: number | null
+          pi_consistency?: number
+          pi_conversion?: number
+          pi_defense?: number
+          pi_tactical?: number
+          pi_threat_creation?: number
           si_consistency?: number
           si_fair_play?: number
           si_opposition?: number
@@ -1986,7 +2090,14 @@ export type Database = {
           distinct_opponents?: number
           fee_tier?: string
           is_provisional?: boolean
+          performance_index?: number
+          performance_index_percentile?: number | null
           performance_std_dev?: number | null
+          pi_consistency?: number
+          pi_conversion?: number
+          pi_defense?: number
+          pi_tactical?: number
+          pi_threat_creation?: number
           si_consistency?: number
           si_fair_play?: number
           si_opposition?: number
@@ -3312,6 +3423,15 @@ export type Database = {
       }
       assert_loyalty_points_mint_works: { Args: never; Returns: string }
       assert_loyalty_redemption_works: { Args: never; Returns: string }
+      assert_open_wager_board_visible: { Args: never; Returns: string }
+      assert_performance_index_snapshots_excludes_financial_columns: {
+        Args: never
+        Returns: string
+      }
+      assert_performance_snapshot_recording_works: {
+        Args: never
+        Returns: string
+      }
       assert_rank_tiered_tournament_gating_works: {
         Args: never
         Returns: string
@@ -3477,6 +3597,24 @@ export type Database = {
       reconcile_orphan_reservations: {
         Args: { p_older_than?: string }
         Returns: number
+      }
+      record_performance_snapshot: {
+        Args: {
+          p_match_id: string
+          p_moves_made: number
+          p_ruleset_id: string
+          p_score_board_control: number
+          p_score_dual_threat: number
+          p_score_forced_response: number
+          p_score_four_in_a_row: number
+          p_score_positional_dominance: number
+          p_score_strategic_pressure: number
+          p_score_threat_density: number
+          p_score_threat_neutralized: number
+          p_user_id: string
+          p_won: boolean
+        }
+        Returns: undefined
       }
       record_tournament_match_result: {
         Args: {
