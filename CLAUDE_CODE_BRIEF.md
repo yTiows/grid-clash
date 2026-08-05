@@ -358,3 +358,15 @@ Don't raise the tournament rake further to "make ranked look cheap by comparison
 ## 7. Definition of done
 
 For every item you complete: `npx tsc --noEmit` clean, `npx next lint` clean, and — for anything that moves money or advances a bracket — an actual executed test (a self-test function in the migration, following the existing `assert_settlement_works()` pattern, or a manual run against a real Supabase project) proving it works, not just that it compiles. Update this file's §3/§4 as you go so the next person (human or agent) inherits an accurate picture instead of a stale one.
+
+---
+
+## Process-rule verification canary (2026-08-05) — a toy task, not real project work
+
+Testing §0 rule 6 (write the phase list before Phase 1) against a real commit sequence, at the user's explicit request, before trusting it on anything real like the rebrand. Deliberately trivial and reversible: a read-only script, no game logic, no money, no schema.
+
+**Task:** `scripts/list-rulesets.ts` — prints ruleset data from `src/lib/game/rulesets.ts`.
+- Phase 1: pending — print each ruleset's `id`/`name`/`boardSize`/`connectTarget`.
+- Phase 2: pending — extend with `moveTimeoutMs`/`hiddenShields`, sort output alphabetically by `id`.
+
+This section (and the script) gets removed once the test is confirmed — the artifact that proves the rule held is the `git log` order of commits, not this text staying in the brief permanently.
