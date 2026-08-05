@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "ws-server": "tsx watch --env-file=.env.local src/server/entrypoint.ts"
+    "ws-server": "tsx watch --env-file=.env.local src/server/entrypoint.ts",
+    "test:scoring": "tsx scripts/test-scoring-engine.ts"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.0",
