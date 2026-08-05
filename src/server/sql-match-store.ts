@@ -39,6 +39,8 @@ import {
 import { distributePrizePool, planSatellite, type FormatId } from "@/lib/game/formats"
 import type {
   MatchStore,
+  PerformanceSnapshotInput,
+  PerformanceSnapshotPlayer,
   SettlementInput,
   TournamentMatchup,
   TournamentSettlementInput,
@@ -690,6 +692,52 @@ export class SqlMatchStore implements MatchStore {
 
     if (error) {
       console.error("[markWagerStarted] FAILED", { challengeId, message: error.message })
+    }
+  }
+
+  /**
+   * Feature B — pure analytics, two independent inserts rather than a single
+   * two-row RPC: unlike settleMatch/settleWagerMatch this never needs
+   * both-or-neither atomicity (there is no invariant like "fee + payout =
+   * pot" linking the two players' rows — each is a standalone data point).
+   * A partial failure (one player's insert succeeds, the other's throws)
+   * just means one fewer data point for one player, logged, not a
+   * correctness problem the way a half-settled match would be.
+   */
+  async recordPerformanceSnapshot(input: PerformanceSnapshotInput): Promise<void> {
+    await Promise.all([
+      this.recordOnePerformanceSnapshot(input.matchId, input.rulesetId, input.player1),
+      this.recordOnePerformanceSnapshot(input.matchId, input.rulesetId, input.player2),
+    ])
+  }
+
+  private async recordOnePerformanceSnapshot(
+    matchId: string,
+    rulesetId: string,
+    player: PerformanceSnapshotPlayer
+  ): Promise<void> {
+    const { error } = await this.db.rpc("record_performance_snapshot", {
+      p_match_id: matchId,
+      p_user_id: player.userId,
+      p_ruleset_id: rulesetId,
+      p_moves_made: player.movesMade,
+      p_won: player.won,
+      p_score_four_in_a_row: player.componentTotals.four_in_a_row,
+      p_score_board_control: player.componentTotals.board_control,
+      p_score_threat_density: player.componentTotals.threat_density,
+      p_score_dual_threat: player.componentTotals.dual_threat,
+      p_score_positional_dominance: player.componentTotals.positional_dominance,
+      p_score_forced_response: player.componentTotals.forced_response,
+      p_score_strategic_pressure: player.componentTotals.strategic_pressure,
+      p_score_threat_neutralized: player.componentTotals.threat_neutralized,
+    })
+
+    if (error) {
+      console.error("[recordPerformanceSnapshot] FAILED", {
+        matchId,
+        userId: player.userId,
+        message: error.message,
+      })
     }
   }
 

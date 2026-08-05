@@ -20,7 +20,7 @@ import {
 } from "@/lib/game/engine"
 import { getRuleset } from "@/lib/game/rulesets"
 import { seedFromId, seededRandom } from "@/lib/game/bracket"
-import { computeStrategicScore, isStrategicScoreEnabled, type ReplayEntry } from "@/lib/game/scoring"
+import { computeStrategicScore, isStrategicScoreEnabled, type ReplayEntry, type ScoreComponentId } from "@/lib/game/scoring"
 import {
   HEARTBEAT_INTERVAL_MS,
   HEARTBEAT_TIMEOUT_MS,
@@ -114,6 +114,29 @@ export interface MatchStore {
    * the challenges row (not a live queue reservation) and never touches Elo.
    */
   settleWagerMatch(input: WagerSettlementInput): Promise<{ winnerPayoutCents: number }>
+  /**
+   * Feature B (Elite Performance Benchmark) — pure gameplay analytics, no
+   * money or rating involved. Idempotent by (match_id, user_id) at the
+   * database layer (record_performance_snapshot's on-conflict-do-nothing),
+   * so a retry from the fire-and-forget caller can never double-count one
+   * match's contribution to a player's index.
+   */
+  recordPerformanceSnapshot(input: PerformanceSnapshotInput): Promise<void>
+}
+
+export interface PerformanceSnapshotPlayer {
+  userId: string
+  movesMade: number
+  won: boolean
+  /** scoring.ts's StrategicScoreLedger.componentTotals for this player — the only shape this ever reads from a match. */
+  componentTotals: Record<ScoreComponentId, number>
+}
+
+export interface PerformanceSnapshotInput {
+  matchId: string
+  rulesetId: string
+  player1: PerformanceSnapshotPlayer
+  player2: PerformanceSnapshotPlayer
 }
 
 export interface TournamentMatchup {
@@ -1360,11 +1383,22 @@ export class MatchServer {
      * traditional winner exactly as if this block didn't run — the
      * strategic engine can only ever change who wins when it succeeds
      * cleanly, never leave a match unsettled.
+     *
+     * Computed unconditionally for a natural ranked ending (not just when
+     * STRATEGIC_SCORE_ENABLED_RULESETS includes this ruleset) because
+     * Feature B (Elite Performance Benchmark) reuses the same ledger for
+     * pure analytics below, regardless of whether Strategic Score is this
+     * match's actual win condition — see recordPerformanceSnapshot's own
+     * comment on why that reuse is safe (analytics never feeds back into
+     * settlement).
      */
-    if (!forcedWinner && match.kind === "ranked" && isStrategicScoreEnabled(match.rulesetId)) {
+    let strategicScoreForAnalytics: ReturnType<typeof computeStrategicScore> | null = null
+    if (!forcedWinner && match.kind === "ranked") {
       try {
-        const scored = computeStrategicScore(getRuleset(match.rulesetId), match.strategicReplay)
-        winnerSlot = scored.strategicWinner
+        strategicScoreForAnalytics = computeStrategicScore(getRuleset(match.rulesetId), match.strategicReplay)
+        if (isStrategicScoreEnabled(match.rulesetId)) {
+          winnerSlot = strategicScoreForAnalytics.strategicWinner
+        }
       } catch (err) {
         console.error(
           `[strategic-score] falling back to traditional winner for match ${match.id} (ruleset ${match.rulesetId}):`,
@@ -1468,6 +1502,40 @@ export class MatchServer {
       moveSequence: match.moveSequence,
       durationSeconds: Math.round((this.clock.now() - match.startedAt) / 1000),
     })
+
+    /**
+     * Feature B — Performance Index analytics. Fire-and-forget, not
+     * awaited: this is pure analytics with no money or bracket state behind
+     * it, so it must never add latency to a player waiting on their
+     * match:over message, and a failure here is even less consequential
+     * than Feature A's THREAT above — logged, never surfaced to the player,
+     * never retried (a missed snapshot is one data point out of many
+     * feeding a rolling index, not a settlement).
+     */
+    if (strategicScoreForAnalytics) {
+      const scored = strategicScoreForAnalytics
+      const movesMade = scored.finalState.moveNumber
+      void this.options.store
+        .recordPerformanceSnapshot({
+          matchId: match.id,
+          rulesetId: match.rulesetId,
+          player1: {
+            userId: match.players[1],
+            movesMade,
+            won: winnerSlot === 1,
+            componentTotals: scored.ledger.componentTotals[1],
+          },
+          player2: {
+            userId: match.players[2],
+            movesMade,
+            won: winnerSlot === 2,
+            componentTotals: scored.ledger.componentTotals[2],
+          },
+        })
+        .catch((err) => {
+          console.error(`[performance-index] failed to record snapshot for match ${match.id}:`, err)
+        })
+    }
 
     for (const slot of [1, 2] as const) {
       const session = this.sessions.get(match.players[slot])
