@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { FileDisputeButton } from "@/components/game/file-dispute-button"
 import { MiniBoard } from "@/components/game/mini-board"
+import { PerformanceGapCard } from "@/components/game/performance-gap-card"
 import { Confetti, PayoutCheck } from "@/components/game/win-celebration"
 import { formatCents } from "@/lib/game/fees"
 import type { MatchResult as Result } from "@/lib/game/use-match-socket"
@@ -27,6 +28,7 @@ export function MatchResultCard({
   matchId,
   onPlayAgain,
   backHref = "/dashboard",
+  showPerformanceGap = false,
 }: {
   result: Result
   /** Ranked matches only — a tournament result has no dispute affordance here. */
@@ -34,6 +36,16 @@ export function MatchResultCard({
   /** Omitted for tournament results — there's no queue to rejoin. */
   onPlayAgain?: () => void
   backHref?: string
+  /**
+   * Feature C is recorded server-side for ranked matches only (see
+   * match-server.ts settle()'s `match.kind === "ranked"` gate) — wager and
+   * tournament results have no snapshot to fetch, so this defaults to
+   * false rather than letting every result screen retry a fetch that can
+   * never succeed for those kinds. Explicit per-caller flag rather than
+   * inferring from matchId's presence, since wager results also pass a
+   * matchId.
+   */
+  showPerformanceGap?: boolean
 }) {
   const copy = REASON_COPY[result.reason]
   const message =
@@ -111,6 +123,12 @@ export function MatchResultCard({
           <FileDisputeButton matchId={matchId} />
         </div>
       )}
+
+      {/* Feature C (Performance Gap) — deliberately placed after the play-again/
+          lobby actions above, not before them: this is supplementary skill
+          analytics, not a lead-in to another match. See performance-gap.ts's
+          own header for why it never nudges continued play. */}
+      {showPerformanceGap && matchId && <PerformanceGapCard matchId={matchId} />}
     </div>
   )
 }

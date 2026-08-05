@@ -166,6 +166,7 @@ function PlayPageInner() {
               result={state.result}
               matchId={state.matchId ?? undefined}
               onPlayAgain={() => void connect(stakeCents, rulesetId)}
+              showPerformanceGap
             />
           )}
 

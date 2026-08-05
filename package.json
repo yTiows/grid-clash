@@ -10,7 +10,8 @@
     "type-check": "tsc --noEmit",
     "ws-server": "tsx watch --env-file=.env.local src/server/entrypoint.ts",
     "test:scoring": "tsx scripts/test-scoring-engine.ts",
-    "test:performance-index": "tsx scripts/test-performance-index.ts"
+    "test:performance-index": "tsx scripts/test-performance-index.ts",
+    "test:performance-gap": "tsx scripts/test-performance-gap.ts"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.0",

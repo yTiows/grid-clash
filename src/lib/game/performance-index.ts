@@ -122,6 +122,25 @@ if (WEIGHT_SUM !== PERFORMANCE_INDEX_MAX) {
   throw new Error(`performance-index.ts: WEIGHTS sum to ${WEIGHT_SUM}, expected ${PERFORMANCE_INDEX_MAX}`)
 }
 
+export type PerformanceSubScoreCategory = "tactical" | "threatCreation" | "defense" | "conversion"
+
+/**
+ * Per-category rate for a SINGLE match, expressed as a 0..1+ fraction of
+ * RATE_SCALE (the same calibration calculatePerformanceIndex itself uses,
+ * not a second set of numbers). Exported for src/lib/game/performance-gap.ts
+ * (Feature C), which needs to name which category was weakest in one
+ * specific match — "one tested implementation," not a second formula that
+ * could drift from this one.
+ */
+export function matchSubScoreFractions(snapshot: MatchPerformanceSnapshot): Record<PerformanceSubScoreCategory, number> {
+  return {
+    tactical: ratePerMove(snapshot, ["board_control", "positional_dominance"]) / RATE_SCALE.tactical,
+    threatCreation: ratePerMove(snapshot, ["threat_density", "dual_threat"]) / RATE_SCALE.threatCreation,
+    defense: ratePerMove(snapshot, ["threat_neutralized"]) / RATE_SCALE.defense,
+    conversion: ratePerMove(snapshot, ["four_in_a_row"]) / RATE_SCALE.conversion,
+  }
+}
+
 export function calculatePerformanceIndex(inputs: PerformanceIndexInputs): PerformanceIndexBreakdown {
   const { matches } = inputs
 
