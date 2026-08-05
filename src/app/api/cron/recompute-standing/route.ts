@@ -9,6 +9,10 @@ import {
   assignFeeTier,
 } from "@/lib/game/reputation"
 import { expectedScore } from "@/lib/game/fees"
+import { calculatePerformanceIndex, type MatchPerformanceSnapshot } from "@/lib/game/performance-index"
+
+/** Same window reputation.ts's CONFIDENCE_FULL_AT_MATCHES uses for "enough data to trust" — a rolling window, not lifetime, so the index tracks current form rather than being anchored by a player's very first matches forever. */
+const PERFORMANCE_INDEX_WINDOW_MATCHES = 30
 
 /**
  * GET|POST /api/cron/recompute-standing
@@ -82,6 +86,27 @@ async function handleRecompute(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: matchesError.message }, { status: 500 })
   }
 
+  /**
+   * Feature B — Elite Performance Benchmark. Selects ONLY from
+   * performance_index_snapshots, never joined against matches' financial
+   * columns (entry_fee_cents, winner_payout_cents, platform_rake_cents) —
+   * this is the query-boundary half of the gameplay-only invariant
+   * performance-index.ts's own header describes; the table-shape half is
+   * assert_performance_index_snapshots_excludes_financial_columns() in the
+   * migration. Ordered newest-first per user below so the windowing keeps
+   * each player's most RECENT matches, not their first ones.
+   */
+  const { data: performanceSnapshots, error: performanceSnapshotsError } = await admin
+    .from("performance_index_snapshots")
+    .select(
+      "user_id, moves_made, score_four_in_a_row, score_board_control, score_threat_density, score_dual_threat, score_positional_dominance, score_forced_response, score_strategic_pressure, score_threat_neutralized, computed_at"
+    )
+    .order("computed_at", { ascending: false })
+    .limit(50_000)
+  if (performanceSnapshotsError) {
+    return NextResponse.json({ error: performanceSnapshotsError.message }, { status: 500 })
+  }
+
   const { data: confirmedAutomation } = await admin
     .from("automation_reviews")
     .select("user_id")
@@ -98,6 +123,31 @@ async function handleRecompute(request: Request): Promise<NextResponse> {
   const upheldFindingsById = countBy(confirmedAutomation, "user_id")
   const openFlagsById = countBy(openFlags, "user_id")
   const chargebacksById = countBy(chargebackFlags, "user_id")
+
+  // Windowed to the most recent PERFORMANCE_INDEX_WINDOW_MATCHES per user —
+  // performanceSnapshots is already newest-first from the query above, so
+  // the first N entries encountered per user are exactly that user's most
+  // recent matches. Reversed to oldest-first when building the final array
+  // purely so MatchPerformanceSnapshot's own "oldest first" doc comment
+  // stays true; calculatePerformanceIndex itself is order-independent.
+  const performanceSnapshotsByUser = new Map<string, MatchPerformanceSnapshot[]>()
+  for (const s of performanceSnapshots ?? []) {
+    const list = performanceSnapshotsByUser.get(s.user_id) ?? []
+    if (list.length >= PERFORMANCE_INDEX_WINDOW_MATCHES) continue
+    list.push({
+      movesMade: s.moves_made,
+      scoreFourInARow: s.score_four_in_a_row,
+      scoreBoardControl: s.score_board_control,
+      scoreThreatDensity: s.score_threat_density,
+      scoreDualThreat: s.score_dual_threat,
+      scorePositionalDominance: s.score_positional_dominance,
+      scoreForcedResponse: s.score_forced_response,
+      scoreStrategicPressure: s.score_strategic_pressure,
+      scoreThreatNeutralized: s.score_threat_neutralized,
+    })
+    performanceSnapshotsByUser.set(s.user_id, list)
+  }
+  for (const list of performanceSnapshotsByUser.values()) list.reverse()
 
   interface MatchAgg {
     matchesPlayed: number
@@ -181,9 +231,24 @@ async function handleRecompute(request: Request): Promise<NextResponse> {
       chargebacks: chargebacksById.get(u.id) ?? 0,
     })
 
+    // Feature B — computed exclusively from performanceSnapshotsByUser
+    // (itself sourced only from performance_index_snapshots, see the query
+    // above). Nothing from `a`/`u`/matches/fee_tier is passed in here —
+    // that's the point.
+    const performanceIndex = calculatePerformanceIndex({
+      matches: performanceSnapshotsByUser.get(u.id) ?? [],
+    })
+
     return {
       user_id: u.id,
       skill_index: skillIndex.total,
+      performance_index: performanceIndex.total,
+      pi_tactical: performanceIndex.tactical,
+      pi_threat_creation: performanceIndex.threatCreation,
+      pi_defense: performanceIndex.defense,
+      pi_conversion: performanceIndex.conversion,
+      pi_consistency: performanceIndex.consistency,
+      performance_index_percentile: null as number | null,
       si_rating: skillIndex.rating,
       si_opposition: skillIndex.opposition,
       si_consistency: skillIndex.consistency,
@@ -229,6 +294,15 @@ async function handleRecompute(request: Request): Promise<NextResponse> {
       skillIndexPercentile: row.skill_index_percentile,
       upheldFairPlayFindings: row.upheld_fair_play_findings,
     })
+  })
+
+  // Same one-pass percentile shape as skill_index above, independent
+  // distribution (a player can rank very differently on raw rating vs. on
+  // move-quality efficiency — that's the whole point of publishing both).
+  const sortedByPerformance = [...rows].sort((a, b) => b.performance_index - a.performance_index)
+  sortedByPerformance.forEach((row, index) => {
+    const percentile = total > 1 ? (index / (total - 1)) * 100 : 0
+    row.performance_index_percentile = Math.round(percentile * 100) / 100
   })
 
   const { error: upsertError } = await admin.from("player_standing").upsert(rows, { onConflict: "user_id" })
