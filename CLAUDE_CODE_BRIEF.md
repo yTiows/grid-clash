@@ -361,14 +361,6 @@ For every item you complete: `npx tsc --noEmit` clean, `npx next lint` clean, an
 
 ---
 
-## Process-rule verification canary (2026-08-05) — a toy task, not real project work
+## §0 rule 6, verified (2026-08-05)
 
-Testing §0 rule 6 (write the phase list before Phase 1) against a real commit sequence, at the user's explicit request, before trusting it on anything real like the rebrand. Deliberately trivial and reversible: a read-only script, no game logic, no money, no schema.
-
-**Task:** `scripts/list-rulesets.ts` — prints ruleset data from `src/lib/game/rulesets.ts`.
-- Phase 1: **complete** — `scripts/list-rulesets.ts`, executed for real (`npx tsx`), 10 rulesets printed correctly (5x5/connect4 x8, 6x6/connect5 siege, 7x7/connect5 sprawl).
-- Phase 2: **complete** — executed for real, alphabetical by `id` confirmed (blitz→sprawl), `feint` is the only `hiddenShields=true` row, matching `rulesets.ts`.
-
-**Test result: the rule held.** Commit order was phase-list (`a9df5ba`) → Phase 1 work+status (`e1d89a8`) → Phase 2 work+status (next commit) — verifiable directly in `git log`, not just asserted. This section and `scripts/list-rulesets.ts` are removed in a follow-up cleanup commit now that the test is done; the commit history itself is the permanent evidence, not this text.
-
-This section (and the script) gets removed once the test is confirmed — the artifact that proves the rule held is the `git log` order of commits, not this text staying in the brief permanently.
+A toy 2-phase task (`scripts/list-rulesets.ts`) tested whether the phase-list-before-Phase-1 rule actually gets followed, not just stated. It held: `a9df5ba` (phase list, both phases marked pending, no script existed yet — confirmed by `ls` failing on the path at that point) landed 29s before `e1d89a8` (Phase 1 work + status update), which landed 27s before `b8d4f7c` (Phase 2 work + status update). Toy section and script removed here now that the test is done — `git log a9df5ba^..b8d4f7c` is the permanent evidence, not this text.
