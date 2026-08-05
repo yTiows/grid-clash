@@ -16,6 +16,7 @@ export type ConnectionPhase =
   | "connecting"
   | "queued"
   | "tournament_waiting"
+  | "wager_waiting"
   | "matched"
   | "over"
   | "disconnected"
@@ -45,6 +46,9 @@ export interface MatchSocketState {
   matchId: string | null
   /** Set only when this match came from a tournament bracket, not the ranked queue. */
   tournamentMatchId: string | null
+  /** Set only when this match came from an accepted wager (open board or a
+   * friend challenge), not the ranked queue or a tournament bracket. */
+  challengeId: string | null
   opponent: MatchOpponent | null
   stakeCents: number | null
   gameState: RedactedGameState | null
@@ -64,6 +68,7 @@ const INITIAL_STATE: MatchSocketState = {
   queuePosition: null,
   matchId: null,
   tournamentMatchId: null,
+  challengeId: null,
   opponent: null,
   stakeCents: null,
   gameState: null,
@@ -86,6 +91,7 @@ export function useMatchSocket() {
   const desiredStakeRef = useRef<number | null>(null)
   const desiredRulesetIdRef = useRef<RankedRulesetId>("classic")
   const desiredTournamentMatchIdRef = useRef<string | null>(null)
+  const desiredChallengeIdRef = useRef<string | null>(null)
   const intentionalCloseRef = useRef(false)
   /**
    * Snapshot taken the instant an optimistic move is applied, so a rejection
@@ -198,6 +204,69 @@ export function useMatchSocket() {
         }))
         return
 
+      case "wager:waiting":
+        setState((s) => ({
+          ...s,
+          phase: "wager_waiting",
+          challengeId: message.challengeId,
+        }))
+        return
+
+      case "wager:start":
+        seqRef.current = message.state.moveNumber
+        lastAuthoritativeRef.current = null
+        pendingMoveRef.current = false
+        setState((s) => ({
+          ...s,
+          phase: "matched",
+          matchId: message.matchId,
+          challengeId: message.challengeId,
+          opponent: message.opponent,
+          stakeCents: message.stakeCents,
+          gameState: message.state,
+          turnDeadline: message.turnDeadline,
+          opponentDisconnected: false,
+          graceEndsAt: null,
+          suddenDeath: false,
+        }))
+        return
+
+      case "wager:sudden_death":
+        seqRef.current = message.state.moveNumber
+        lastAuthoritativeRef.current = null
+        pendingMoveRef.current = false
+        setState((s) => ({
+          ...s,
+          phase: "matched",
+          gameState: message.state,
+          turnDeadline: message.turnDeadline,
+          result: null,
+          suddenDeath: true,
+        }))
+        return
+
+      case "wager:over":
+        lastAuthoritativeRef.current = null
+        pendingMoveRef.current = false
+        setState((s) => ({
+          ...s,
+          phase: "over",
+          gameState: message.state,
+          result: {
+            result: message.result,
+            reason: message.reason,
+            // No eloDelta for a wager — settle_wager_match deliberately
+            // never touches it. MatchResult.eloDelta is optional for
+            // exactly this case; the result card treats an absent value as
+            // "not applicable", not "zero change".
+            payoutCents: message.payoutCents,
+            board: message.state.board,
+            you: message.state.you,
+            winningLine: message.state.winningLine,
+          },
+        }))
+        return
+
       case "match:state":
         seqRef.current = message.state.moveNumber
         lastAuthoritativeRef.current = null
@@ -282,7 +351,11 @@ export function useMatchSocket() {
           // an opponent" forever with no way out. Once matched, an error is a
           // rejected move, not a reason to leave the game, so phase stays put
           // and the rollback above is what corrects the board.
-          const isPreMatch = s.phase === "connecting" || s.phase === "queued" || s.phase === "tournament_waiting"
+          const isPreMatch =
+            s.phase === "connecting" ||
+            s.phase === "queued" ||
+            s.phase === "tournament_waiting" ||
+            s.phase === "wager_waiting"
           return {
             ...s,
             phase: isPreMatch ? "error" : s.phase,
@@ -339,14 +412,20 @@ export function useMatchSocket() {
 
         const canRetryRanked = desiredStakeRef.current !== null
         const canRetryTournament = desiredTournamentMatchIdRef.current !== null
+        const canRetryWager = desiredChallengeIdRef.current !== null
 
-        if ((canRetryRanked || canRetryTournament) && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        if (
+          (canRetryRanked || canRetryTournament || canRetryWager) &&
+          reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS
+        ) {
           reconnectAttemptsRef.current += 1
           setTimeout(() => {
             if (desiredStakeRef.current !== null) {
               void connect(desiredStakeRef.current, desiredRulesetIdRef.current)
             } else if (desiredTournamentMatchIdRef.current !== null) {
               void connectTournament(desiredTournamentMatchIdRef.current)
+            } else if (desiredChallengeIdRef.current !== null) {
+              void connectWager(desiredChallengeIdRef.current)
             }
           }, RECONNECT_DELAY_MS * reconnectAttemptsRef.current)
         } else {
@@ -372,6 +451,7 @@ export function useMatchSocket() {
       desiredStakeRef.current = stakeCents
       desiredRulesetIdRef.current = rulesetId
       desiredTournamentMatchIdRef.current = null
+      desiredChallengeIdRef.current = null
       setState((s) => ({ ...s, phase: "connecting", errorMessage: null }))
       await openSocket({ type: "queue:join", stakeCents, rulesetId })
     },
@@ -384,8 +464,23 @@ export function useMatchSocket() {
       intentionalCloseRef.current = false
       desiredTournamentMatchIdRef.current = tournamentMatchId
       desiredStakeRef.current = null
+      desiredChallengeIdRef.current = null
       setState((s) => ({ ...s, phase: "connecting", errorMessage: null }))
       await openSocket({ type: "tournament:join", tournamentMatchId })
+    },
+    [openSocket]
+  )
+
+  /** Connects to a specific accepted wager rather than the open ranked queue
+   * — same rendezvous shape as connectTournament. */
+  const connectWager = useCallback(
+    async (challengeId: string) => {
+      intentionalCloseRef.current = false
+      desiredChallengeIdRef.current = challengeId
+      desiredStakeRef.current = null
+      desiredTournamentMatchIdRef.current = null
+      setState((s) => ({ ...s, phase: "connecting", errorMessage: null }))
+      await openSocket({ type: "wager:join", challengeId })
     },
     [openSocket]
   )
@@ -450,6 +545,7 @@ export function useMatchSocket() {
     intentionalCloseRef.current = true
     desiredStakeRef.current = null
     desiredTournamentMatchIdRef.current = null
+    desiredChallengeIdRef.current = null
     lastAuthoritativeRef.current = null
     pendingMoveRef.current = false
     socketRef.current?.close(1000, "client left")
@@ -464,5 +560,5 @@ export function useMatchSocket() {
     }
   }, [])
 
-  return { state, connect, connectTournament, leaveQueue, submitMove, resign, disconnect }
+  return { state, connect, connectTournament, connectWager, leaveQueue, submitMove, resign, disconnect }
 }

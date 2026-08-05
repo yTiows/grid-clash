@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RULESETS } from "@/lib/game/rulesets"
+import { WAGER_MIN_STAKE_CENTS } from "@/lib/game/fees"
 
 const initial: ChallengeActionState = { status: "idle", message: null }
 
@@ -73,9 +74,9 @@ export function ChallengeInviteForm({
           id="stakeCents"
           name="stakeCents"
           type="number"
-          min={minStakeCents ?? 1}
+          min={minStakeCents ?? WAGER_MIN_STAKE_CENTS}
           max={maxStakeCents ?? undefined}
-          defaultValue={minStakeCents ?? 500}
+          defaultValue={minStakeCents ?? WAGER_MIN_STAKE_CENTS}
           required
         />
       </div>

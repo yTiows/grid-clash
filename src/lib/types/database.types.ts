@@ -353,7 +353,9 @@ export type Database = {
       }
       challenges: {
         Row: {
+          acceptor_reservation_id: string | null
           challenger_id: string
+          challenger_reservation_id: string | null
           created_at: string
           expires_at: string
           id: string
@@ -361,11 +363,14 @@ export type Database = {
           responded_at: string | null
           ruleset_id: string
           stake_cents: number
+          started_at: string | null
           status: string
-          target_id: string
+          target_id: string | null
         }
         Insert: {
+          acceptor_reservation_id?: string | null
           challenger_id: string
+          challenger_reservation_id?: string | null
           created_at?: string
           expires_at: string
           id?: string
@@ -373,11 +378,14 @@ export type Database = {
           responded_at?: string | null
           ruleset_id: string
           stake_cents: number
+          started_at?: string | null
           status?: string
-          target_id: string
+          target_id?: string | null
         }
         Update: {
+          acceptor_reservation_id?: string | null
           challenger_id?: string
+          challenger_reservation_id?: string | null
           created_at?: string
           expires_at?: string
           id?: string
@@ -385,10 +393,18 @@ export type Database = {
           responded_at?: string | null
           ruleset_id?: string
           stake_cents?: number
+          started_at?: string | null
           status?: string
-          target_id?: string
+          target_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "challenges_acceptor_reservation_id_fkey"
+            columns: ["acceptor_reservation_id"]
+            isOneToOne: false
+            referencedRelation: "stake_reservations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "challenges_challenger_id_fkey"
             columns: ["challenger_id"]
@@ -408,6 +424,13 @@ export type Database = {
             columns: ["challenger_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "challenges_challenger_reservation_id_fkey"
+            columns: ["challenger_reservation_id"]
+            isOneToOne: false
+            referencedRelation: "stake_reservations"
             referencedColumns: ["id"]
           },
           {
@@ -3264,6 +3287,10 @@ export type Database = {
       }
     }
     Functions: {
+      accept_open_wager: {
+        Args: { p_challenge_id: string }
+        Returns: undefined
+      }
       accounts_are_linked: { Args: { a: string; b: string }; Returns: boolean }
       assert_bounty_claim_works: { Args: never; Returns: string }
       assert_can_wager: {
@@ -3275,6 +3302,7 @@ export type Database = {
         Args: never
         Returns: string
       }
+      assert_expire_stale_wagers_works: { Args: never; Returns: string }
       assert_friendship_flow_works: { Args: never; Returns: string }
       assert_function_dependencies: { Args: never; Returns: string }
       assert_ledger_vocabulary: { Args: never; Returns: string }
@@ -3294,6 +3322,17 @@ export type Database = {
       assert_settlement_works: { Args: never; Returns: string }
       assert_tournament_completion_works: { Args: never; Returns: string }
       assert_tournament_entry_works: { Args: never; Returns: string }
+      assert_tournament_match_result_match_id_contract: {
+        Args: never
+        Returns: string
+      }
+      assert_wager_anti_abuse_works: { Args: never; Returns: string }
+      assert_wager_pairing_not_rate_limited: {
+        Args: { p_a: string; p_b: string }
+        Returns: undefined
+      }
+      assert_wager_settlement_works: { Args: never; Returns: string }
+      assert_wager_stake_bounds_enforced: { Args: never; Returns: string }
       audit_balance_drift: {
         Args: never
         Returns: {
@@ -3303,6 +3342,7 @@ export type Database = {
           user_id: string
         }[]
       }
+      cancel_wager: { Args: { p_challenge_id: string }; Returns: undefined }
       check_contest_eligibility: {
         Args: { p_tournament_id: string; p_user_id: string }
         Returns: {
@@ -3351,6 +3391,10 @@ export type Database = {
         }
         Returns: string
       }
+      create_open_wager: {
+        Args: { p_ruleset_id: string; p_stake_cents: number }
+        Returns: string
+      }
       create_tournament_round: {
         Args: {
           p_pairings: Json
@@ -3366,6 +3410,13 @@ export type Database = {
           p_user_id: string
         }
         Returns: string
+      }
+      expire_stale_wagers: {
+        Args: never
+        Returns: {
+          challenge_id: string
+          outcome: string
+        }[]
       }
       file_match_dispute: {
         Args: { p_match_id: string; p_reason: string }
@@ -3445,11 +3496,19 @@ export type Database = {
         Returns: undefined
       }
       refund_stake: { Args: { p_reservation_id: string }; Returns: boolean }
+      refund_wager_stake: {
+        Args: { p_reservation_id: string }
+        Returns: boolean
+      }
       request_withdrawal: {
         Args: { p_amount_cents: number; p_user_id: string }
         Returns: string
       }
       reserve_stake: {
+        Args: { p_amount_cents: number; p_user_id: string }
+        Returns: string
+      }
+      reserve_wager_stake: {
         Args: { p_amount_cents: number; p_user_id: string }
         Returns: string
       }
@@ -3486,6 +3545,24 @@ export type Database = {
           p_reservation_1: string
           p_reservation_2: string
           p_stake_cents: number
+          p_timings_1: number[]
+          p_timings_2: number[]
+          p_winner_id: string
+          p_winner_payout_cents: number
+        }
+        Returns: boolean
+      }
+      settle_wager_match: {
+        Args: {
+          p_challenge_id: string
+          p_duration_seconds: number
+          p_fee_cents: number
+          p_is_draw: boolean
+          p_loser_id: string
+          p_match_id: string
+          p_move_sequence: string[]
+          p_reason: string
+          p_replay: Json
           p_timings_1: number[]
           p_timings_2: number[]
           p_winner_id: string

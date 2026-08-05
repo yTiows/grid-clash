@@ -174,6 +174,49 @@ function move(slot: 1 | 2, index: number): ReplayEntry {
   check("throws on an illegal move rather than returning a result", threw)
 }
 
+// --- Test 6: match-server.ts wire-shape contract ----------------------------
+// match-server.ts builds ReplayEntry objects straight from the validated
+// wire message (message.kind/message.index/message.targetIndex) and from
+// its own timeout handler, not through this test's `move()` helper. This
+// constructs entries the same way match-server.ts's handleMove and its
+// turn-timer callback actually do (see the strategicReplay.push call sites)
+// to catch a shape drift between the two independently of whether anyone
+// remembers to update this file when the wire protocol changes. This is
+// the closest thing to an integration test available without a full
+// MatchServer/store/socket test harness, which does not exist in this
+// project for any other server-side path either (see CLAUDE_CODE_BRIEF.md
+// §3, Phase 4 — "no test runner exists"). settle()'s own strategic-score
+// branch is otherwise verified by code review and tsc/lint only; call that
+// out explicitly rather than implying it, since STRATEGIC_SCORE_ENABLED_RULESETS
+// is empty and nothing has exercised it against a live match yet.
+{
+  console.log("Test 6: match-server.ts wire-shape contract")
+  const messageShapedReplay: ReplayEntry[] = [
+    { kind: "move", slot: 1, move: { kind: "normal", index: 12 } },
+    { kind: "timeout", slot: 2 },
+    { kind: "move", slot: 1, move: { kind: "normal", index: 13 } },
+    { kind: "move", slot: 2, move: { kind: "normal", index: 0 } },
+    { kind: "move", slot: 1, move: { kind: "normal", index: 14 } },
+    { kind: "move", slot: 2, move: { kind: "normal", index: 1 } },
+    { kind: "move", slot: 1, move: { kind: "normal", index: 11 } },
+  ]
+  const result = computeStrategicScore(CLASSIC, messageShapedReplay)
+  check("a replay built the way match-server.ts builds it (including a timeout entry) scores without throwing", result.traditionalWinner === 1)
+
+  const swapShapedReplay: ReplayEntry[] = [
+    { kind: "move", slot: 1, move: { kind: "normal", index: 0 } },
+    { kind: "move", slot: 2, move: { kind: "normal", index: 1 } },
+    { kind: "move", slot: 1, move: { kind: "swap", index: 0, targetIndex: 1 } },
+  ]
+  let swapThrew = false
+  try {
+    computeStrategicScore(CLASSIC, swapShapedReplay)
+  } catch {
+    swapThrew = true
+  }
+  check("a swap entry with targetIndex (as message.targetIndex arrives on the wire) is accepted, not rejected as malformed", !swapThrew)
+}
+
 console.log("")
 if (failures > 0) {
   console.error(`${failures} check(s) failed.`)

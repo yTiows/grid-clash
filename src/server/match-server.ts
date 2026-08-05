@@ -91,6 +91,28 @@ export interface MatchStore {
    * death instead of settling it, since a bracket needs exactly one winner.
    */
   recordTournamentResult(input: TournamentSettlementInput): Promise<void>
+  /**
+   * Looks up an accepted challenges row by id. Null if it doesn't exist,
+   * isn't accepted yet, or is missing either side's reservation — any of
+   * which means there is nothing to connect two sockets to. Mirrors
+   * getTournamentMatchup's contract exactly.
+   */
+  getWagerMatchup(challengeId: string): Promise<WagerMatchup | null>
+  /**
+   * Stamps challenges.started_at the moment both sides are actually in the
+   * game, not when the challenge was accepted. expire_stale_wagers()'s
+   * 30-minute accepted-but-never-started sweep keys off this column — an
+   * accepted challenge whose players never both showed up should still be
+   * refundable, but once real play begins it must not be swept out from
+   * under a live match.
+   */
+  markWagerStarted(challengeId: string): Promise<void>
+  /**
+   * Wager equivalent of settleMatch: same idempotent-by-match_id,
+   * conservation-checked settlement, but reads its stake reservations off
+   * the challenges row (not a live queue reservation) and never touches Elo.
+   */
+  settleWagerMatch(input: WagerSettlementInput): Promise<{ winnerPayoutCents: number }>
 }
 
 export interface TournamentMatchup {
@@ -120,6 +142,32 @@ export interface SettlementInput {
   stakeCents: number
   reason: "line" | "resign" | "abandon" | "no_legal_moves" | "board_full"
   /** Server-measured, never client-reported. */
+  moveLatenciesBySlot: Record<PlayerSlot, number[]>
+  moveSequence: string[]
+  durationSeconds: number
+}
+
+export interface WagerMatchup {
+  challengeId: string
+  /** Labeled by the challenges row's original role, not by board slot —
+   * slot assignment is still coin-flipped at match start same as ranked
+   * and tournament. */
+  player1: string
+  player1ReservationId: string
+  player2: string
+  player2ReservationId: string
+  rulesetId: string
+  stakeCents: number
+}
+
+export interface WagerSettlementInput {
+  matchId: string
+  challengeId: string
+  winnerId: string | null
+  loserId: string | null
+  isDraw: boolean
+  stakeCents: number
+  reason: "line" | "resign" | "abandon" | "no_legal_moves" | "board_full"
   moveLatenciesBySlot: Record<PlayerSlot, number[]>
   moveSequence: string[]
   durationSeconds: number
@@ -252,9 +300,12 @@ interface Session {
 interface LiveMatch {
   id: string
   /** Ranked pays per match and moves Elo; tournament does neither — money and
-   * placement are settled once, at contest completion, not per bracket game. */
-  kind: "ranked" | "tournament"
+   * placement are settled once, at contest completion, not per bracket game.
+   * Wager pays per match like ranked, but never moves Elo — it's an
+   * equal-stake money contest, not a ladder contest. */
+  kind: "ranked" | "tournament" | "wager"
   tournamentMatchId?: string
+  challengeId?: string
   rulesetId: string
   stakeCents: number
   state: GameState
@@ -354,6 +405,11 @@ export class MatchServer {
    * tournamentMatchId, not a FIFO list.
    */
   private readonly tournamentWaiting = new Map<string, Session>()
+  /** Same rendezvous shape as tournamentWaiting, keyed by challengeId
+   * instead of tournamentMatchId — an accepted wager has exactly one valid
+   * opponent (already decided by create_open_wager/accept_open_wager or a
+   * friend challenge), not a pool to match against. */
+  private readonly wagerWaiting = new Map<string, Session>()
   private readonly redeemedTickets = new Set<string>()
   private readonly clock: Clock
 
@@ -452,6 +508,8 @@ export class MatchServer {
         return this.leaveQueue(session)
       case "tournament:join":
         return this.joinTournamentMatch(session, message.tournamentMatchId)
+      case "wager:join":
+        return this.joinWagerMatch(session, message.challengeId)
       case "match:move":
         return this.handleMove(session, message)
       case "match:resign":
@@ -797,6 +855,137 @@ export class MatchServer {
     this.armTurnTimer(match)
   }
 
+  // --- Wager matches ------------------------------------------------------
+
+  /**
+   * Same rendezvous shape as joinTournamentMatch, keyed by challengeId. The
+   * SQL layer (accept_open_wager/respond_to_challenge) already decided who
+   * the two players are and already reserved both stakes — this method's
+   * only job is connecting two live sockets to that decision.
+   */
+  private async joinWagerMatch(session: Session, challengeId: string): Promise<void> {
+    if (session.matchId) {
+      const current = this.matches.get(session.matchId)
+      if (current?.challengeId === challengeId) {
+        const slot = this.slotOf(current, session.userId)
+        if (slot) {
+          return this.send(session, {
+            type: "wager:start",
+            matchId: current.id,
+            challengeId,
+            opponent: await this.options.store.getPlayerCard(current.players[opponentOf(slot)]),
+            stakeCents: current.stakeCents,
+            state: redactStateFor(current.state, slot),
+            turnDeadline: current.turnDeadline,
+          })
+        }
+      }
+      return this.send(session, errorMessage("not_in_match"))
+    }
+
+    const matchup = await this.options.store.getWagerMatchup(challengeId)
+    if (!matchup) return this.send(session, errorMessage("not_in_match"))
+
+    if (matchup.player1 !== session.userId && matchup.player2 !== session.userId) {
+      return this.send(session, errorMessage("not_in_match"))
+    }
+
+    const waiting = this.wagerWaiting.get(challengeId)
+
+    if (waiting && waiting.userId === session.userId) {
+      this.wagerWaiting.set(challengeId, session)
+      return this.send(session, { type: "wager:waiting", challengeId })
+    }
+
+    if (waiting) {
+      this.wagerWaiting.delete(challengeId)
+      await this.startWagerMatch(waiting, session, matchup)
+      return
+    }
+
+    this.wagerWaiting.set(challengeId, session)
+    this.send(session, { type: "wager:waiting", challengeId })
+  }
+
+  private async startWagerMatch(a: Session, b: Session, matchup: WagerMatchup): Promise<void> {
+    /**
+     * Defense in depth, same reasoning as startTournamentMatch's own check:
+     * create_challenge/accept_open_wager/respond_to_challenge already refuse
+     * a linked pair at accept time, but an accepted wager can sit for up to
+     * the 30-minute expire_stale_wagers grace window before both sides show
+     * up here. A link discovered in that window should still stop the match
+     * from actually starting rather than only being caught after the fact.
+     */
+    if (await this.options.store.arePlayersLinked(a.userId, b.userId)) {
+      this.send(a, errorMessage("ineligible"))
+      this.send(b, errorMessage("ineligible"))
+      return
+    }
+
+    const matchId = randomUUID()
+    const ruleset = getRuleset(matchup.rulesetId)
+    const state = createGame(ruleset)
+
+    const [p1, p2] = coinFlipGivesFirstSlotTo(matchId) ? [a, b] : [b, a]
+    const reservationFor = (userId: string): string =>
+      userId === matchup.player1 ? matchup.player1ReservationId : matchup.player2ReservationId
+
+    const match: LiveMatch = {
+      id: matchId,
+      kind: "wager",
+      challengeId: matchup.challengeId,
+      rulesetId: matchup.rulesetId,
+      stakeCents: matchup.stakeCents,
+      state,
+      players: { 1: p1.userId, 2: p2.userId },
+      reservations: { 1: reservationFor(p1.userId), 2: reservationFor(p2.userId) },
+      turnDeadline: this.clock.now() + ruleset.moveTimeoutMs + MATCH_START_GRACE_MS,
+      turnStartedAt: this.clock.now(),
+      turnTimer: null,
+      startedAt: this.clock.now(),
+      latencies: { 1: [], 2: [] },
+      moveSequence: [],
+      suddenDeathRounds: 0,
+      disconnected: {},
+      spectatorUserIds: new Set(),
+      settled: false,
+    }
+
+    this.matches.set(matchId, match)
+    p1.matchId = matchId
+    p2.matchId = matchId
+
+    const [card1, card2] = await Promise.all([
+      this.options.store.getPlayerCard(p1.userId),
+      this.options.store.getPlayerCard(p2.userId),
+    ])
+
+    this.send(p1, {
+      type: "wager:start",
+      matchId,
+      challengeId: matchup.challengeId,
+      opponent: card2,
+      stakeCents: matchup.stakeCents,
+      state: redactStateFor(state, 1),
+      turnDeadline: match.turnDeadline,
+    })
+    this.send(p2, {
+      type: "wager:start",
+      matchId,
+      challengeId: matchup.challengeId,
+      opponent: card1,
+      stakeCents: matchup.stakeCents,
+      state: redactStateFor(state, 2),
+      turnDeadline: match.turnDeadline,
+    })
+
+    this.armTurnTimer(match)
+
+    // Stamped after both sockets are actually in the game, not at accept
+    // time — see the markWagerStarted doc on the MatchStore interface.
+    await this.options.store.markWagerStarted(matchup.challengeId)
+  }
+
   // --- Play -----------------------------------------------------------------
 
   private async handleMove(
@@ -1012,6 +1201,18 @@ export class MatchServer {
       }
     }
 
+    // No refund here either: the stake was already reserved back at
+    // accept_open_wager/respond_to_challenge time, not at wager:join. If
+    // this leaves the challenge accepted but never started,
+    // expire_stale_wagers()'s 30-minute grace sweep is the backstop that
+    // refunds it — same "cron sweep as backstop" posture as refundStake's
+    // own orphan-reservation sweep.
+    for (const [challengeId, waitingSession] of this.wagerWaiting) {
+      if (waitingSession.userId === userId) {
+        this.wagerWaiting.delete(challengeId)
+      }
+    }
+
     if (session.spectatingMatchId) {
       const spectated = this.matches.get(session.spectatingMatchId)
       if (spectated) spectated.spectatorUserIds.delete(userId)
@@ -1159,6 +1360,42 @@ export class MatchServer {
       return
     }
 
+    if (match.kind === "wager") {
+      const wagerSettlement = await this.options.store.settleWagerMatch({
+        matchId: match.id,
+        challengeId: match.challengeId as string,
+        winnerId: winnerSlot ? match.players[winnerSlot] : null,
+        loserId: loserSlot ? match.players[loserSlot] : null,
+        isDraw,
+        stakeCents: match.stakeCents,
+        reason,
+        moveLatenciesBySlot: match.latencies,
+        moveSequence: match.moveSequence,
+        durationSeconds: Math.round((this.clock.now() - match.startedAt) / 1000),
+      })
+
+      for (const slot of [1, 2] as const) {
+        const session = this.sessions.get(match.players[slot])
+        if (!session) continue
+
+        const isWinner = slot === winnerSlot
+        this.send(session, {
+          type: "wager:over",
+          matchId: match.id,
+          challengeId: match.challengeId as string,
+          state: redactStateFor(match.state, slot, true),
+          result: isDraw ? "draw" : isWinner ? "won" : "lost",
+          reason,
+          payoutCents: isDraw || isWinner ? wagerSettlement.winnerPayoutCents : 0,
+        })
+        session.matchId = null
+      }
+
+      this.notifySpectatorsOfResult(match, winnerSlot)
+      this.matches.delete(match.id)
+      return
+    }
+
     const settlement = await this.options.store.settleMatch({
       matchId: match.id,
       reservationIds: match.reservations,
@@ -1250,6 +1487,13 @@ export class MatchServer {
           ? {
               type: "tournament:sudden_death",
               tournamentMatchId: match.tournamentMatchId as string,
+              state: redactStateFor(match.state, slot),
+              turnDeadline: match.turnDeadline,
+            }
+          : match.kind === "wager"
+          ? {
+              type: "wager:sudden_death",
+              challengeId: match.challengeId as string,
               state: redactStateFor(match.state, slot),
               turnDeadline: match.turnDeadline,
             }

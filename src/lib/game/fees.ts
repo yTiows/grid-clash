@@ -360,11 +360,14 @@ export function formatPercent(fraction: number, digits = 2): string {
  * Tournament fee is charged on the gross field, not per match, and is stated
  * on the contest card before entry.
  *
- * NOTE — the 1v1 standard fee is 1% (FEE_TIERS.standard). Tournament fees are
- * higher because an entry buys a structure rather than a single match:
- * bracket running, seat guarantees, concentrated prizes and a title. That gap
- * is defensible but it is large, and sophisticated players will compare the
- * two directly. See TOURNAMENT_FEE_BPS.
+ * NOTE — the 1v1 standard fee is 10% (FEE_TIERS.standard, as of the
+ * 2026-07-28 repricing — this comment previously said 1%, which stopped
+ * being true two repricings ago; fixed here rather than left to drift a
+ * third time). Tournament fees are higher because an entry buys a
+ * structure rather than a single match: bracket running, seat guarantees,
+ * concentrated prizes and a title. That gap is defensible but it is large,
+ * and sophisticated players will compare the two directly. See
+ * TOURNAMENT_FEE_BPS.
  */
 export type ContestKind =
   | "ranked"
@@ -434,6 +437,77 @@ export function calculatePrizePool(
 /** Expected value of one entry against a uniform field. */
 export function tournamentExpectedValueCents(pool: PrizePool): number {
   return pool.prizePoolCents / pool.fieldSize - pool.entryFeeCents
+}
+
+// --- Wager economics ---------------------------------------------------
+
+/**
+ * Wager marketplace (CLAUDE_CODE_BRIEF.md Phase 4, confirmed by the person
+ * before implementation). Deliberately bracketed between ranked and
+ * tournament: a wager is a private 2-party pot like ranked (not a pooled
+ * field), so it doesn't earn tournament's structure/bracket/title premium —
+ * but it's player-targeted, not blind-matched, which is real additional
+ * platform risk (the easiest surface to abuse by design, per the brief's
+ * own framing) that ranked's queue doesn't carry. 12% sits above ranked's
+ * 10% for that reason and below tournament's 14%.
+ *
+ * Elite is exactly half of standard, the same story FEE_TIERS.elite and
+ * FORMAT_TIER_RAKE_BPS's elite tiers already tell for ranked and
+ * tournaments respectively. Established sits close to the same ~0.9x
+ * ratio both of those already use, rounded to a clean printed number.
+ *
+ * Charged at the WINNER's tier — reuses sql-match-store.ts's existing
+ * ranked-settlement rule verbatim ("a tier change mid-match cannot
+ * retroactively alter what was owed") rather than inventing a second,
+ * different answer to "two players, two tiers" for this contest type.
+ */
+export const WAGER_FEE_TIERS_BPS: Record<FeeTier, number> = {
+  standard: 1200,
+  established: 1100,
+  elite: 600,
+}
+
+export function wagerFeeBps(tier: FeeTier): number {
+  return WAGER_FEE_TIERS_BPS[tier]
+}
+
+/**
+ * Mechanic A only (equal-stake) — the person confirmed this for launch and
+ * explicitly deferred asymmetric-stake mechanics (proportional/capped
+ * payout, free-form odds) as their own future proposal, not bundled here.
+ * That keeps the money math identical in shape to calculateMatchFee: both
+ * sides stake the same amount, pot = stake * 2, fee comes off the top.
+ *
+ * Minimum stake is deliberately set ABOVE RANKED_STAKE_TIERS_CENTS' $20
+ * ceiling, not at or below it — a cheaper wager would be a backdoor around
+ * the funnel design fees.ts's own ranked-ceiling comment describes (push a
+ * player who outgrows ranked toward a tournament, not around it). Maximum
+ * matches the platform's existing deposit ceiling (deposit.ts
+ * MAX_DEPOSIT_CENTS) rather than inventing a second number for "the most
+ * money in play at once."
+ */
+export const WAGER_MIN_STAKE_CENTS = 2_500 // $25
+export const WAGER_MAX_STAKE_CENTS = 500_000 // $5,000
+
+export interface WagerFee {
+  tier: FeeTier
+  bps: number
+  potCents: number
+  feeCents: number
+  winnerPayoutCents: number
+}
+
+export function calculateWagerFee(stakeCents: number, winnerTier: FeeTier): WagerFee {
+  const bps = wagerFeeBps(winnerTier)
+  const potCents = stakeCents * 2
+  const feeCents = Math.floor((potCents * bps) / 10_000)
+  return {
+    tier: winnerTier,
+    bps,
+    potCents,
+    feeCents,
+    winnerPayoutCents: potCents - feeCents,
+  }
 }
 
 // Milestone sizing constants and progressToNextMilestone() live in

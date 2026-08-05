@@ -92,6 +92,18 @@ const tournamentJoin = z.object({
   tournamentMatchId: z.string().uuid(),
 })
 
+/**
+ * Wagers skip the queue too, same as tournament:join — the two players are
+ * already decided (create_open_wager/accept_open_wager or a friend
+ * challenge), and the stake was already reserved at that point, not here.
+ * The server starts the game once both sides holding an accepted challenge
+ * have sent this.
+ */
+const wagerJoin = z.object({
+  type: z.literal("wager:join"),
+  challengeId: z.string().uuid(),
+})
+
 const matchMove = z.object({
   type: z.literal("match:move"),
   matchId: z.string().uuid(),
@@ -133,6 +145,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   queueJoin,
   queueLeave,
   tournamentJoin,
+  wagerJoin,
   matchMove,
   matchResign,
   spectateJoin,
@@ -211,6 +224,37 @@ export type ServerMessage =
    * settle().
    */
   | { type: "match:sudden_death"; matchId: string; state: RedactedGameState; turnDeadline: number }
+  | {
+      type: "wager:waiting"
+      challengeId: string
+    }
+  | {
+      type: "wager:start"
+      matchId: string
+      challengeId: string
+      opponent: { username: string; eloRating: number }
+      stakeCents: number
+      state: RedactedGameState
+      turnDeadline: number
+    }
+  | { type: "wager:sudden_death"; challengeId: string; state: RedactedGameState; turnDeadline: number }
+  | {
+      /**
+       * Wagers get their own settlement message rather than reusing
+       * match:over's shape (as tournament:over does, not match:over) —
+       * match:over carries a mandatory eloDelta, and wagers deliberately
+       * never move Elo (see settle_wager_match). A field that's always 0
+       * reads as "trust me it didn't move"; omitting it entirely makes "no
+       * rating is at stake here" a property of the wire protocol itself.
+       */
+      type: "wager:over"
+      matchId: string
+      challengeId: string
+      state: RedactedGameState
+      result: "won" | "lost" | "draw"
+      reason: "line" | "resign" | "abandon" | "no_legal_moves" | "board_full"
+      payoutCents: number
+    }
   | { type: "match:opponent_disconnected"; matchId: string; graceEndsAt: number }
   | { type: "match:opponent_reconnected"; matchId: string }
   /** Neutral view — see engine.ts redactStateForSpectator. Sent once on

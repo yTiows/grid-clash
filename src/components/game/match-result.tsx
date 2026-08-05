@@ -45,13 +45,20 @@ export function MatchResultCard({
 
   const isWin = result.result === "won"
   const isDraw = result.result === "draw"
-  const hasRankedTerms = result.payoutCents !== undefined && result.eloDelta !== undefined
+  // Tracked separately, not as one combined "ranked terms" flag: a wager
+  // result always has a payout (real money moved) but never an eloDelta
+  // (settle_wager_match deliberately doesn't touch it) — a flag that
+  // required both present would silently hide the payout, the win
+  // celebration, and the dispute affordance on every wager win.
+  const hasPayout = result.payoutCents !== undefined
+  const hasEloDelta = result.eloDelta !== undefined
+  const hasMoneyTerms = hasPayout || hasEloDelta
 
   // The full check-and-confetti treatment is reserved for a real ranked/
-  // tournament win with a nonzero payout — never for practice (no real money
-  // to reveal) and never for a loss/draw (BRAND.md §6: result screens stay
-  // "flat and factual," no celebration inflation on a loss).
-  const isBigWin = isWin && hasRankedTerms && (result.payoutCents ?? 0) > 0
+  // tournament/wager win with a nonzero payout — never for practice (no real
+  // money to reveal) and never for a loss/draw (BRAND.md §6: result screens
+  // stay "flat and factual," no celebration inflation on a loss).
+  const isBigWin = isWin && hasPayout && (result.payoutCents ?? 0) > 0
 
   return (
     <div className="panel space-y-5 p-8 text-center">
@@ -68,21 +75,23 @@ export function MatchResultCard({
 
       {isBigWin && <PayoutCheck amountCents={result.payoutCents!} />}
 
-      {hasRankedTerms && (
+      {hasMoneyTerms && (
         <div className="panel mx-auto max-w-xs space-y-2 p-4 text-sm">
-          {!isBigWin && (
+          {hasPayout && !isBigWin && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">Payout</span>
               <span className="tabular money font-medium">{formatCents(result.payoutCents!)}</span>
             </div>
           )}
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Elo change</span>
-            <span className={`tabular font-medium ${result.eloDelta! >= 0 ? "text-primary" : "text-rival"}`}>
-              {result.eloDelta! >= 0 ? "+" : ""}
-              {result.eloDelta}
-            </span>
-          </div>
+          {hasEloDelta && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Elo change</span>
+              <span className={`tabular font-medium ${result.eloDelta! >= 0 ? "text-primary" : "text-rival"}`}>
+                {result.eloDelta! >= 0 ? "+" : ""}
+                {result.eloDelta}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -97,7 +106,7 @@ export function MatchResultCard({
         </Button>
       </div>
 
-      {hasRankedTerms && matchId && (
+      {matchId && (
         <div className="flex justify-center pt-1">
           <FileDisputeButton matchId={matchId} />
         </div>

@@ -22,6 +22,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import {
   calculateMatchFee,
   calculateRatingChange,
+  calculateWagerFee,
   type FeeTier,
   type PrizePool,
 } from "@/lib/game/fees"
@@ -36,7 +37,14 @@ import {
   type RoundResult,
 } from "@/lib/game/bracket"
 import { distributePrizePool, planSatellite, type FormatId } from "@/lib/game/formats"
-import type { MatchStore, SettlementInput, TournamentMatchup, TournamentSettlementInput } from "@/server/match-server"
+import type {
+  MatchStore,
+  SettlementInput,
+  TournamentMatchup,
+  TournamentSettlementInput,
+  WagerMatchup,
+  WagerSettlementInput,
+} from "@/server/match-server"
 import type { PlayerSlot } from "@/lib/game/engine"
 
 type Admin = ReturnType<typeof createAdminClient>
@@ -580,9 +588,116 @@ export class SqlMatchStore implements MatchStore {
     }
   }
 
+  /**
+   * Wager equivalent of settleMatch. Reads its stake reservations off the
+   * challenges row (getWagerMatchup already resolved them into
+   * match.reservations before the match started) via p_challenge_id, rather
+   * than from a live queue reservation — and, deliberately, never touches
+   * Elo or elo_ratings_history: a wager is an equal-stake money contest, not
+   * a ladder contest.
+   */
+  async settleWagerMatch(input: WagerSettlementInput): Promise<{ winnerPayoutCents: number }> {
+    const { winnerId, loserId, isDraw, stakeCents } = input
+
+    const participants = await this.loadParticipants(input)
+
+    // Fee is charged at the winner's tier, same precedent as settleMatch.
+    const fee = calculateWagerFee(stakeCents, participants.winner.feeTier)
+
+    const { data, error } = await this.db.rpc("settle_wager_match", {
+      p_match_id: input.matchId,
+      p_challenge_id: input.challengeId,
+      p_winner_id: winnerId as string,
+      p_loser_id: loserId as string,
+      p_is_draw: isDraw,
+      p_fee_cents: isDraw ? 0 : fee.feeCents,
+      p_winner_payout_cents: isDraw ? stakeCents : fee.winnerPayoutCents,
+      p_reason: input.reason,
+      p_duration_seconds: input.durationSeconds,
+      p_replay: {
+        reason: input.reason,
+        moves: input.moveSequence.length,
+        durationSeconds: input.durationSeconds,
+      },
+      p_move_sequence: input.moveSequence,
+      p_timings_1: input.moveLatenciesBySlot[1],
+      p_timings_2: input.moveLatenciesBySlot[2],
+    })
+
+    if (error) {
+      console.error("[settleWagerMatch] FAILED", {
+        matchId: input.matchId,
+        challengeId: input.challengeId,
+        message: error.message,
+      })
+      throw new Error(`Wager settlement failed for match ${input.matchId}: ${error.message}`)
+    }
+
+    if (data === false) {
+      console.warn("[settleWagerMatch] already settled, ignoring", { matchId: input.matchId })
+    }
+
+    return {
+      winnerPayoutCents: isDraw ? stakeCents : fee.winnerPayoutCents,
+    }
+  }
+
+  /**
+   * Mirrors getTournamentMatchup's contract: null means there is nothing to
+   * connect two sockets to, whether because the id doesn't exist, isn't
+   * accepted, or (shouldn't happen given accept_open_wager/
+   * respond_to_challenge always set both) is missing a reservation.
+   */
+  async getWagerMatchup(challengeId: string): Promise<WagerMatchup | null> {
+    const { data: challenge } = await this.db
+      .from("challenges")
+      .select(
+        "id, challenger_id, target_id, stake_cents, ruleset_id, status, challenger_reservation_id, acceptor_reservation_id"
+      )
+      .eq("id", challengeId)
+      .maybeSingle()
+
+    if (!challenge || challenge.status !== "accepted") return null
+    if (!challenge.target_id || !challenge.challenger_reservation_id || !challenge.acceptor_reservation_id) {
+      return null
+    }
+
+    return {
+      challengeId: challenge.id,
+      player1: challenge.challenger_id,
+      player1ReservationId: challenge.challenger_reservation_id,
+      player2: challenge.target_id,
+      player2ReservationId: challenge.acceptor_reservation_id,
+      rulesetId: challenge.ruleset_id,
+      stakeCents: challenge.stake_cents,
+    }
+  }
+
+  /**
+   * Best-effort. A failed stamp here does not lose money — worst case,
+   * expire_stale_wagers()'s 30-minute grace sweep refunds a match that was
+   * actually in progress, which the players would surface immediately (a
+   * live match cannot silently vanish; the socket is still open). Logged
+   * loudly so an operator can widen the grace window if this ever fires for
+   * real, same posture as refundStake's own best-effort logging.
+   */
+  async markWagerStarted(challengeId: string): Promise<void> {
+    const { error } = await this.db
+      .from("challenges")
+      .update({ started_at: new Date().toISOString() })
+      .eq("id", challengeId)
+      .is("started_at", null)
+
+    if (error) {
+      console.error("[markWagerStarted] FAILED", { challengeId, message: error.message })
+    }
+  }
+
   // --- internals ------------------------------------------------------------
 
-  private async loadParticipants(input: SettlementInput): Promise<{
+  private async loadParticipants(
+    input: Pick<SettlementInput, "winnerId" | "loserId">
+  ): Promise<{
     winner: Participant
     loser: Participant
   }> {
