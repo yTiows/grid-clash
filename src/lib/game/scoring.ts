@@ -65,6 +65,7 @@ export type ScoreComponentId =
   | "positional_dominance"
   | "forced_response"
   | "strategic_pressure"
+  | "threat_neutralized"
 
 export interface ScoreEvent {
   moveNumber: number
@@ -146,6 +147,26 @@ const FORCED_RESPONSE_BONUS = 25
 /** Awarded when the mover keeps at least one live threat alive across two consecutive moves of their own (not merely re-creating one) — sustained pressure, distinct from the single-move DUAL_THREAT_BONUS spike. */
 const STRATEGIC_PRESSURE_BONUS = 10
 
+/**
+ * Per opponent threat this move removes (a placement onto the opponent's
+ * threat cell, or a bomb/swap that breaks up the line the threat depended
+ * on). Added after Phase 2's bot-vs-bot simulation showed every OTHER
+ * component here rewards offense only — a policy that never blocks and only
+ * ever extends its own lines still accumulates board_control/
+ * threat_density/positional_dominance on every move, while a policy that
+ * spends moves blocking earns nothing for successfully doing so, so blind
+ * aggression was outscoring real defense purely because defense was
+ * unscored, not because it was worse play. Concretely: a blind-rush policy
+ * simulated across 2,000 Classic games won only 10.9% of games by the
+ * traditional first-line rule but 21.6% by Strategic Score before this
+ * component existed — the opposite of Feature A's stated goal. Set equal to
+ * BOARD_CONTROL_BONUS rather than lower, since neutralizing a real threat is
+ * at minimum as valuable as the passive territorial gain that already earns
+ * the same number — see scripts/simulate-strategic-score.ts for the
+ * before/after numbers this constant was tuned against.
+ */
+const THREAT_NEUTRALIZED_PER_THREAT = 35
+
 // --- Board helpers -------------------------------------------------------
 
 function ownedCells(board: Board, slot: PlayerSlot): number {
@@ -224,6 +245,7 @@ function emptyComponentTotals(): Record<ScoreComponentId, number> {
     positional_dominance: 0,
     forced_response: 0,
     strategic_pressure: 0,
+    threat_neutralized: 0,
   }
 }
 
@@ -272,9 +294,14 @@ function scoreMove(
     push("positional_dominance", "Positional Dominance", POSITIONAL_DOMINANCE_BONUS)
   }
 
+  const opponentThreatsBefore = countThreats(before.board, opponent, rules)
   const opponentThreatsAfter = countThreats(after.board, opponent, rules)
   if (threatsAfter > 0 && opponentThreatsAfter === 0) {
     push("forced_response", "Forced-Response Pressure", FORCED_RESPONSE_BONUS)
+  }
+  const threatsRemoved = Math.max(0, opponentThreatsBefore - opponentThreatsAfter)
+  if (threatsRemoved > 0) {
+    push("threat_neutralized", "Threat Neutralized", THREAT_NEUTRALIZED_PER_THREAT * threatsRemoved)
   }
 
   if (threatsAfter > 0 && running.hadThreatLastOwnMove) {
@@ -300,6 +327,7 @@ const TIE_BREAK_COMPONENT_ORDER: ScoreComponentId[] = [
   "positional_dominance",
   "forced_response",
   "strategic_pressure",
+  "threat_neutralized",
 ]
 
 function resolveTie(

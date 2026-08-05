@@ -97,6 +97,27 @@ function move(slot: 1 | 2, index: number): ReplayEntry {
     const dualThreatEvents = r.ledger.events.filter((e) => e.slot === 1 && e.component === "dual_threat")
     check("dual_threat fires exactly once for an open three-in-a-row (two completion cells)", dualThreatEvents.length === 1, JSON.stringify(r.ledger.events))
   }
+
+  // threat_neutralized: fires when a move removes one of the OPPONENT's
+  // active threats. Added after Phase 2's bot-vs-bot simulation showed a
+  // blind-rush policy (never blocks) out-scored balanced play under the
+  // original components, precisely because defense earned nothing — see
+  // scoring.ts's THREAT_NEUTRALIZED_PER_THREAT comment for the numbers.
+  {
+    const replay: ReplayEntry[] = [
+      move(1, 0),
+      move(2, 16),
+      move(1, 1),
+      move(2, 17),
+      move(1, 2),
+      move(2, 18), // P2 now has an open three (16,17,18) — threats at both 15 and 19
+      move(1, 15), // P1 blocks one end
+    ]
+    const r = computeStrategicScore(CLASSIC, replay)
+    const blockEvents = r.ledger.events.filter((e) => e.slot === 1 && e.moveNumber === r.finalState.moveNumber)
+    const byComponent = Object.fromEntries(blockEvents.map((e) => [e.component, e.points]))
+    check("blocking one of two open-three threats earns threat_neutralized = 35", byComponent.threat_neutralized === 35, JSON.stringify(byComponent))
+  }
 }
 
 // --- Test 3: worked-example point values, verified independently -----------
