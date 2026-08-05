@@ -5,6 +5,7 @@ import { AvatarUpload } from "@/components/social/avatar-upload"
 import { ChallengeInviteForm } from "@/components/social/challenge-invite-form"
 import { ChallengePreferencesForm } from "@/components/social/challenge-preferences-form"
 import { FriendRequestButton } from "@/components/social/friend-request-button"
+import { PerformanceBenchmarkCard } from "@/components/social/performance-benchmark-card"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { createClient } from "@/lib/supabase/server"
@@ -75,7 +76,13 @@ export default async function PlayerProfilePage({
   const avatarUrl = profile.avatar_url
 
   const [{ data: standing }, { data: titleRow }] = await Promise.all([
-    supabase.from("player_standing").select("skill_index, trust_band").eq("user_id", profile.id).maybeSingle(),
+    supabase
+      .from("player_standing")
+      .select(
+        "skill_index, trust_band, performance_index, pi_tactical, pi_threat_creation, pi_defense, pi_conversion, pi_consistency"
+      )
+      .eq("user_id", profile.id)
+      .maybeSingle(),
     supabase
       .from("player_titles")
       .select("tier")
@@ -83,6 +90,48 @@ export default async function PlayerProfilePage({
       .eq("is_equipped", true)
       .maybeSingle(),
   ])
+
+  /**
+   * Feature B — Elite Performance Benchmark. Both queries read only
+   * gameplay-shaped columns (performance_index_snapshots has none of any
+   * other kind — see the migration's own structural self-test). Top-10%
+   * average is computed client-side over a small row set rather than a
+   * dedicated view: this platform's target scale (~5,000 users,
+   * CLAUDE_CODE_BRIEF.md §6) makes that cheap, and it avoids a second
+   * schema object for a number only ever needed on this one page.
+   */
+  const [{ data: topTierRows }, { data: recentSnapshots }] = await Promise.all([
+    supabase.from("player_standing").select("performance_index").lte("performance_index_percentile", 10),
+    supabase
+      .from("performance_index_snapshots")
+      .select(
+        "moves_made, score_four_in_a_row, score_board_control, score_threat_density, score_dual_threat, score_positional_dominance, score_forced_response, score_strategic_pressure, score_threat_neutralized, computed_at"
+      )
+      .eq("user_id", profile.id)
+      .order("computed_at", { ascending: false })
+      .limit(30), // matches recompute-standing's PERFORMANCE_INDEX_WINDOW_MATCHES, so "matches considered" on this card and the cached performance_index below are describing the same window
+  ])
+
+  const topTenPercentAverage =
+    topTierRows && topTierRows.length > 0
+      ? Math.round(topTierRows.reduce((sum, r) => sum + r.performance_index, 0) / topTierRows.length)
+      : null
+
+  const recentTrend = (recentSnapshots ?? [])
+    .slice()
+    .reverse() // oldest first, for the sparkline's left-to-right reading direction
+    .map((s) => {
+      const total =
+        s.score_four_in_a_row +
+        s.score_board_control +
+        s.score_threat_density +
+        s.score_dual_threat +
+        s.score_positional_dominance +
+        s.score_forced_response +
+        s.score_strategic_pressure +
+        s.score_threat_neutralized
+      return s.moves_made > 0 ? Math.round((total / s.moves_made) * 10) / 10 : 0
+    })
 
   let friendshipState:
     | { kind: "none" }
@@ -197,6 +246,22 @@ export default async function PlayerProfilePage({
           )}
         </CardContent>
       </Card>
+
+      <PerformanceBenchmarkCard
+        data={{
+          performanceIndex: standing?.performance_index ?? 0,
+          matchesConsidered: recentSnapshots?.length ?? 0,
+          breakdown: {
+            tactical: standing?.pi_tactical ?? 0,
+            threatCreation: standing?.pi_threat_creation ?? 0,
+            defense: standing?.pi_defense ?? 0,
+            conversion: standing?.pi_conversion ?? 0,
+            consistency: standing?.pi_consistency ?? 0,
+          },
+          topTenPercentAverage: topTenPercentAverage,
+          recentTrend,
+        }}
+      />
 
       {isSelf && (
         <Card>
